@@ -1,0 +1,78 @@
+<style>
+.pb-chat-btn {
+    opacity: 0.5;
+    transition: all 0.2s;
+}
+.pb-chat-btn:hover {
+    opacity: 0.8 !important;
+    background-color: rgba(99, 102, 241, 0.12) !important;
+}
+.pb-chat-btn.pb-live {
+    color: #6366f1 !important;
+    opacity: 0.85 !important;
+}
+.pb-chat-btn.pb-live:hover {
+    opacity: 1 !important;
+    background-color: rgba(99, 102, 241, 0.2) !important;
+}
+</style>
+
+<button
+    type="button"
+    class="text-button pb-chat-btn"
+    :class="{ 'pb-live': globalThis._phantomBridgeRunning }"
+    @click="globalThis._phantomBridgeToggle && globalThis._phantomBridgeToggle()"
+    title="Open Phantom Bridge — browse inside A0's container"
+>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"/>
+        <circle cx="12" cy="12" r="3"/>
+        <line x1="12" y1="2" x2="12" y2="5"/>
+        <line x1="12" y1="19" x2="12" y2="22"/>
+        <line x1="2" y1="12" x2="5" y2="12"/>
+        <line x1="19" y1="12" x2="22" y2="12"/>
+    </svg>
+    <p>Bridge</p>
+</button>
+
+<script type="module">
+    const { callJsonApi } = await import("/js/api.js");
+
+    globalThis._phantomBridgeRunning = false;
+
+    // Poll bridge status
+    async function checkStatus() {
+        try {
+            const res = await callJsonApi("plugins/phantom_bridge/bridge", { action: "status" });
+            globalThis._phantomBridgeRunning = res?.running || false;
+        } catch (e) {
+            globalThis._phantomBridgeRunning = false;
+        }
+    }
+
+    globalThis._phantomBridgeToggle = async function () {
+        if (globalThis._phantomBridgeRunning) {
+            // Already running — open the bridge page
+            window.open("/usr/plugins/phantom_bridge/webui/bridge.html", "_blank");
+        } else {
+            // Start the bridge, then open
+            try {
+                if (globalThis.toast) globalThis.toast("Starting Phantom Bridge...", "info");
+                const res = await callJsonApi("plugins/phantom_bridge/bridge", { action: "start" });
+                if (res?.running || res?.ok) {
+                    globalThis._phantomBridgeRunning = true;
+                    if (globalThis.toast) globalThis.toast("Bridge is live!", "success");
+                    window.open("/usr/plugins/phantom_bridge/webui/bridge.html", "_blank");
+                } else {
+                    if (globalThis.toast) globalThis.toast(res?.error || "Failed to start bridge", "error");
+                }
+            } catch (e) {
+                if (globalThis.toast) globalThis.toast("Error: " + e.message, "error");
+            }
+        }
+    };
+
+    // Check status on load and every 30s
+    checkStatus();
+    setInterval(checkStatus, 30000);
+</script>

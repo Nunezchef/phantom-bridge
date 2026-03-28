@@ -118,29 +118,28 @@
         <br>Click anywhere on the screenshot to interact. The observer is watching and learning.
     </div>
 
-    <script>
+    <script type="module">
+        import { callJsonApi } from "/js/api.js";
+
         let currentPageId = null;
         let pages = [];
         let refreshInterval = null;
         let screenshotInterval = null;
 
         async function api(action, params = {}) {
-            const resp = await fetch("/plugin/phantom_bridge/api/proxy", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action, ...params }),
-            });
-            return resp.json();
+            return callJsonApi("plugins/phantom_bridge/proxy", { action, ...params });
         }
 
         async function bridgeApi(action, params = {}) {
-            const resp = await fetch("/plugin/phantom_bridge/api/bridge", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action, ...params }),
-            });
-            return resp.json();
+            return callJsonApi("plugins/phantom_bridge/bridge", { action, ...params });
         }
+
+        // Expose functions to onclick handlers
+        window.navigate = navigate;
+        window.selectPage = selectPage;
+        window.goBack = goBack;
+        window.refresh = refresh;
+        window.handleClick = handleClick;
 
         async function init() {
             // Check if bridge is running
@@ -252,11 +251,7 @@
                 if (!ws) return;
 
                 // Use the proxy to dispatch mouse events
-                await fetch("/plugin/phantom_bridge/api/click", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ page_id: currentPageId, x, y }),
-                });
+                await callJsonApi("plugins/phantom_bridge/click", { page_id: currentPageId, x, y });
 
                 // Refresh after click
                 setTimeout(takeScreenshot, 500);

@@ -1,4 +1,5 @@
 import { createStore } from "/js/AlpineStore.js";
+import { callJsonApi } from "/js/api.js";
 
 export const store = createStore("phantomBridge", {
     running: false,
@@ -28,62 +29,30 @@ export const store = createStore("phantomBridge", {
 
     async fetchStatus() {
         try {
-            // Bridge status
-            const statusResp = await fetch("/plugin/phantom_bridge/api/bridge", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "status" }),
-            });
-            if (statusResp.ok) {
-                const data = await statusResp.json();
-                this.running = data.running || false;
-                this.connectUrl = data.connect_url || "";
-            }
+            const status = await callJsonApi("plugins/phantom_bridge/bridge", { action: "status" });
+            this.running = status.running || false;
+            this.connectUrl = status.connect_url || "";
 
-            // Auth registry
-            const authResp = await fetch("/plugin/phantom_bridge/api/bridge", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "auth_registry" }),
-            });
-            if (authResp.ok) {
-                const data = await authResp.json();
-                const registry = data.registry || {};
-                this.authEntries = Object.entries(registry).map(([domain, entry]) => ({
-                    domain,
-                    authenticated: entry.authenticated,
-                    expires: entry.expires_at ? `expires ${new Date(entry.expires_at).toLocaleDateString()}` : "no expiry",
-                }));
-                this.authCount = this.authEntries.length;
-            }
+            const auth = await callJsonApi("plugins/phantom_bridge/bridge", { action: "auth_registry" });
+            const registry = auth.registry || {};
+            this.authEntries = Object.entries(registry).map(([domain, entry]) => ({
+                domain,
+                authenticated: entry.authenticated,
+                expires: entry.expires_at ? `expires ${new Date(entry.expires_at).toLocaleDateString()}` : "no expiry",
+            }));
+            this.authCount = this.authEntries.length;
 
-            // Sitemaps
-            const smResp = await fetch("/plugin/phantom_bridge/api/bridge", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "sitemaps" }),
-            });
-            if (smResp.ok) {
-                const data = await smResp.json();
-                const sitemaps = data.sitemaps || {};
-                this.sitemapEntries = Object.entries(sitemaps).map(([domain, sm]) => ({
-                    domain,
-                    features: Object.keys(sm.features || {}).length,
-                }));
-                this.sitemapCount = this.sitemapEntries.length;
-            }
+            const sm = await callJsonApi("plugins/phantom_bridge/bridge", { action: "sitemaps" });
+            const sitemaps = sm.sitemaps || {};
+            this.sitemapEntries = Object.entries(sitemaps).map(([domain, s]) => ({
+                domain,
+                features: Object.keys(s.features || {}).length,
+            }));
+            this.sitemapCount = this.sitemapEntries.length;
 
-            // Playbooks
-            const pbResp = await fetch("/plugin/phantom_bridge/api/bridge", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "playbooks" }),
-            });
-            if (pbResp.ok) {
-                const data = await pbResp.json();
-                this.playbooks = data.playbooks || [];
-                this.playbookCount = this.playbooks.length;
-            }
+            const pb = await callJsonApi("plugins/phantom_bridge/bridge", { action: "playbooks" });
+            this.playbooks = pb.playbooks || [];
+            this.playbookCount = this.playbooks.length;
         } catch (e) {
             // API not ready yet
         }
@@ -91,14 +60,8 @@ export const store = createStore("phantomBridge", {
 
     async startBridge() {
         try {
-            const resp = await fetch("/plugin/phantom_bridge/api/bridge", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "start" }),
-            });
-            if (resp.ok) {
-                await this.fetchStatus();
-            }
+            await callJsonApi("plugins/phantom_bridge/bridge", { action: "start" });
+            await this.fetchStatus();
         } catch (e) {
             console.error("Failed to start bridge:", e);
         }
@@ -106,23 +69,15 @@ export const store = createStore("phantomBridge", {
 
     async stopBridge() {
         try {
-            const resp = await fetch("/plugin/phantom_bridge/api/bridge", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "stop" }),
-            });
-            if (resp.ok) {
-                this.running = false;
-                await this.fetchStatus();
-            }
+            await callJsonApi("plugins/phantom_bridge/bridge", { action: "stop" });
+            this.running = false;
+            await this.fetchStatus();
         } catch (e) {
             console.error("Failed to stop bridge:", e);
         }
     },
 
     openBridge() {
-        // Open the bridge landing page — proxies CDP through A0's port
-        // No extra ports needed
         window.open("/usr/plugins/phantom_bridge/webui/bridge.html", "_blank");
     },
 });

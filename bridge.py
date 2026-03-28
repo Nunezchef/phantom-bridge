@@ -253,7 +253,7 @@ class BrowserBridge:
 
         # Try A0's Playwright-installed Chromium first
         try:
-            from python.helpers.playwright import get_playwright_binary, ensure_playwright_binary
+            from helpers.playwright import get_playwright_binary, ensure_playwright_binary
 
             binary = get_playwright_binary()
             if binary:

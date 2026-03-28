@@ -15,10 +15,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-try:
-    from helpers.extension import Extension
-except ImportError:
-    from python.helpers.extension import Extension
+from helpers.extension import Extension
 
 logger = logging.getLogger("browser_bridge")
 

@@ -12,10 +12,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-try:
-    from helpers.extension import Extension
-except ImportError:
-    from python.helpers.extension import Extension
+from helpers.extension import Extension
 
 from agent import LoopData
 

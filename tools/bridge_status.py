@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from python.helpers.tool import Tool, Response
+from helpers.tool import Tool, Response
 
 logger = logging.getLogger("browser_bridge")
 

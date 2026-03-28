@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from python.helpers.tool import Tool, Response
+from helpers.tool import Tool, Response
 
 logger = logging.getLogger("browser_bridge")
 

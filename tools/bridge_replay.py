@@ -22,6 +22,7 @@ class BridgeReplay(Tool):
     async def execute(self, **kwargs: Any) -> Response:
         name = self.args.get("name", "")
         dry_run = str(self.args.get("dry_run", "false")).lower() in ("true", "1", "yes")
+        skip_health = str(self.args.get("skip_health_check", "false")).lower() in ("true", "1", "yes")
 
         if not name:
             return Response(
@@ -47,6 +48,21 @@ class BridgeReplay(Tool):
                 message=f"No playbook found with name '{name}'. Available: {names}",
                 break_loop=False,
             )
+
+        # Pre-replay session health check
+        if not skip_health and not dry_run and playbook.domain:
+            health = await self._check_session_health(playbook.domain)
+            if health is not None and not health.get("healthy", True):
+                return Response(
+                    message=(
+                        f"Session health check FAILED for '{playbook.domain}'.\n"
+                        f"Reason: {health.get('reason', 'unknown')}\n\n"
+                        "The user needs to re-authenticate via the browser bridge "
+                        "(bridge_open) before this playbook can be replayed.\n\n"
+                        "To skip this check, set skip_health_check=true."
+                    ),
+                    break_loop=False,
+                )
 
         # Resolve profile directory
         profile_dir = self._get_profile_dir()
@@ -107,6 +123,28 @@ class BridgeReplay(Tool):
                                 f"Step {step_num}/{total}: Navigating to {step.url}"
                             )
                             await page.goto(step.url, wait_until="networkidle", timeout=30000)
+                        elif step.action == "click" and step.selector:
+                            label = f" ({step.text})" if step.text else ""
+                            progress_lines.append(
+                                f"Step {step_num}/{total}: Click {step.selector}{label}"
+                            )
+                            await page.click(step.selector, timeout=10000)
+                        elif step.action == "type" and step.selector:
+                            progress_lines.append(
+                                f"Step {step_num}/{total}: Type into {step.selector}"
+                            )
+                            await page.fill(step.selector, step.value or "", timeout=10000)
+                        elif step.action == "select" and step.selector:
+                            progress_lines.append(
+                                f"Step {step_num}/{total}: Select '{step.value}' in {step.selector}"
+                            )
+                            await page.select_option(step.selector, step.value or "", timeout=10000)
+                        elif step.action == "submit" and step.selector:
+                            label = f" ({step.text})" if step.text else ""
+                            progress_lines.append(
+                                f"Step {step_num}/{total}: Submit{label} via {step.selector}"
+                            )
+                            await page.click(step.selector, timeout=10000)
                         elif step.action == "download":
                             progress_lines.append(
                                 f"Step {step_num}/{total}: Download — {step.value or 'file'}"
@@ -165,6 +203,25 @@ class BridgeReplay(Tool):
             ),
             break_loop=False,
         )
+
+    async def _check_session_health(self, domain: str) -> dict | None:
+        """Check session health for the playbook's domain before replay.
+
+        Returns the health check result dict, or None if the check
+        could not be performed (observer unavailable).
+        """
+        try:
+            from plugins.browser_bridge.bridge import get_bridge
+
+            bridge = get_bridge()
+            if bridge and bridge.is_running():
+                manager = getattr(bridge, "_observer_manager", None)
+                if manager and manager.auth:
+                    return await manager.auth.check_session_health(domain)
+        except Exception as exc:
+            logger.debug("bridge_replay: health check failed: %s", exc)
+
+        return None
 
     def _get_recorder(self) -> Any | None:
         """Get the PlaybookRecorder instance."""

@@ -1,9 +1,14 @@
 """
 Playbook Recorder — records user browser actions as replayable playbooks.
 
-Subscribes to CDP events (Page navigation, Network requests) and captures
-them as a sequence of PlaybookSteps.  Pure observation — never interferes
-with user browsing.
+Subscribes to CDP events (Page navigation, Network requests, DOM interactions)
+and captures them as a sequence of PlaybookSteps.  Pure observation — never
+interferes with user browsing.
+
+DOM interactions (clicks, typing, selects, form submits) are captured by
+injecting a lightweight JavaScript hook via Runtime.addBinding + Runtime.evaluate.
+The hook builds CSS selectors for target elements, masks passwords, debounces
+rapid input events, and reports back via the __phantomBridge binding.
 """
 
 from __future__ import annotations
@@ -28,6 +33,137 @@ _STATIC_EXTENSIONS = frozenset({
 
 # HTTP methods worth recording (skip GET — too noisy)
 _RECORDED_METHODS = frozenset({"POST", "PUT", "DELETE", "PATCH"})
+
+# ---------------------------------------------------------------------------
+# JavaScript hook injected into every page during recording.
+# Captures click, input, change, submit events and sends them back to
+# Python via the __phantomBridge CDP binding.
+# ---------------------------------------------------------------------------
+_DOM_HOOK_JS = r"""
+(function() {
+    if (window.__phantomBridgeInstalled) return;
+    window.__phantomBridgeInstalled = true;
+
+    // ---- selector builder: id > name > class > nth-child ----
+    function buildSelector(el) {
+        if (!el || el === document || el === document.documentElement) return 'html';
+        if (el.id) return '#' + CSS.escape(el.id);
+        if (el.name) return el.tagName.toLowerCase() + '[name="' + el.name + '"]';
+
+        var tag = el.tagName.toLowerCase();
+        // class-based (first non-empty class)
+        if (el.classList && el.classList.length > 0) {
+            for (var i = 0; i < el.classList.length; i++) {
+                var cls = el.classList[i];
+                if (cls && document.querySelectorAll(tag + '.' + CSS.escape(cls)).length === 1) {
+                    return tag + '.' + CSS.escape(cls);
+                }
+            }
+        }
+
+        // nth-child fallback
+        var parent = el.parentElement;
+        if (!parent) return tag;
+        var children = Array.from(parent.children).filter(function(c) {
+            return c.tagName === el.tagName;
+        });
+        var idx = children.indexOf(el) + 1;
+        var parentSel = buildSelector(parent);
+        return parentSel + ' > ' + tag + ':nth-child(' + idx + ')';
+    }
+
+    // ---- interactive element check ----
+    var INTERACTIVE = ['A','BUTTON','INPUT','SELECT','TEXTAREA'];
+    function isInteractive(el) {
+        if (!el || !el.tagName) return false;
+        if (INTERACTIVE.indexOf(el.tagName) !== -1) return true;
+        if (el.getAttribute('role') === 'button') return true;
+        if (el.hasAttribute('onclick')) return true;
+        return false;
+    }
+
+    // Find closest interactive ancestor (for clicks on spans inside buttons)
+    function closestInteractive(el) {
+        var cur = el;
+        while (cur && cur !== document) {
+            if (isInteractive(cur)) return cur;
+            cur = cur.parentElement;
+        }
+        return null;
+    }
+
+    function send(data) {
+        try { window.__phantomBridge(JSON.stringify(data)); } catch(e) {}
+    }
+
+    // ---- click handler ----
+    document.addEventListener('click', function(e) {
+        var target = closestInteractive(e.target);
+        if (!target) return;
+        var text = (target.innerText || '').trim().substring(0, 50);
+        send({
+            type: 'click',
+            selector: buildSelector(target),
+            text: text,
+            url: location.href
+        });
+    }, true);
+
+    // ---- input handler (debounced 500ms) ----
+    var inputTimers = {};
+    document.addEventListener('input', function(e) {
+        var target = e.target;
+        if (!target || !target.tagName) return;
+        var tag = target.tagName;
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA') return;
+
+        var sel = buildSelector(target);
+        if (inputTimers[sel]) clearTimeout(inputTimers[sel]);
+
+        inputTimers[sel] = setTimeout(function() {
+            delete inputTimers[sel];
+            var val = target.value || '';
+            // Mask passwords — never record actual password values
+            if (target.type === 'password') val = '***';
+            send({
+                type: 'type',
+                selector: sel,
+                value: val,
+                url: location.href
+            });
+        }, 500);
+    }, true);
+
+    // ---- select change handler ----
+    document.addEventListener('change', function(e) {
+        var target = e.target;
+        if (!target || target.tagName !== 'SELECT') return;
+        send({
+            type: 'select',
+            selector: buildSelector(target),
+            value: target.value || '',
+            url: location.href
+        });
+    }, true);
+
+    // ---- form submit handler ----
+    document.addEventListener('submit', function(e) {
+        var form = e.target;
+        if (!form || form.tagName !== 'FORM') return;
+        // Find the submit button (if any) for the selector
+        var btn = form.querySelector('[type="submit"]') || form.querySelector('button');
+        var sel = btn ? buildSelector(btn) : buildSelector(form);
+        var text = btn ? (btn.innerText || '').trim().substring(0, 50) : '';
+        send({
+            type: 'submit',
+            selector: sel,
+            text: text,
+            value: form.action || '',
+            url: location.href
+        });
+    }, true);
+})();
+"""
 
 
 class PlaybookRecorder:
@@ -73,7 +209,8 @@ class PlaybookRecorder:
     async def start_recording(self, name: str) -> None:
         """Start recording a new playbook.
 
-        Subscribes to CDP events for navigation and network activity.
+        Subscribes to CDP events for navigation, network activity, and
+        DOM interactions (clicks, typing, selects, form submits).
         """
         if self._recording:
             raise RuntimeError(
@@ -95,6 +232,22 @@ class PlaybookRecorder:
         # Enable CDP domains we need
         await self._cdp.send("Page.enable")
         await self._cdp.send("Network.enable")
+        await self._cdp.send("Runtime.enable")
+
+        # Register the __phantomBridge binding for DOM interaction capture
+        try:
+            await self._cdp.send(
+                "Runtime.addBinding", {"name": "__phantomBridge"}
+            )
+        except RuntimeError as exc:
+            # Binding may already exist from a previous recording
+            if "bindingCalled" not in str(exc).lower():
+                logger.debug(
+                    "playbook_recorder: addBinding note: %s", exc
+                )
+
+        # Inject the DOM hook into the current page
+        await self._inject_dom_hook()
 
         # Subscribe to events
         await self._cdp.subscribe("Page.frameNavigated", self._on_navigated)
@@ -106,6 +259,14 @@ class PlaybookRecorder:
         )
         await self._cdp.subscribe(
             "Network.responseReceived", self._on_network_response
+        )
+        # Re-inject DOM hook after every page load (navigations unload scripts)
+        await self._cdp.subscribe(
+            "Page.loadEventFired", self._on_page_load_reinject
+        )
+        # Receive DOM interaction events from the injected JS hook
+        await self._cdp.subscribe(
+            "Runtime.bindingCalled", self._on_binding_called
         )
 
         logger.info("playbook_recorder: recording started — '%s'", slug)
@@ -264,6 +425,103 @@ class PlaybookRecorder:
             url=url,
             value=filename,
         ))
+
+    # ------------------------------------------------------------------
+    # DOM interaction handlers
+    # ------------------------------------------------------------------
+
+    async def _inject_dom_hook(self) -> None:
+        """Inject the DOM interaction capture script into the current page.
+
+        Uses Runtime.evaluate (not Page.addScriptTag) to bypass CSP
+        restrictions. Only injects into the main frame.
+        """
+        try:
+            await self._cdp.send(
+                "Runtime.evaluate",
+                {"expression": _DOM_HOOK_JS, "awaitPromise": False},
+            )
+            logger.debug("playbook_recorder: DOM hook injected")
+        except Exception as exc:
+            logger.warning(
+                "playbook_recorder: failed to inject DOM hook: %s", exc
+            )
+
+    async def _on_page_load_reinject(self, params: dict[str, Any]) -> None:
+        """Re-inject the DOM hook after every page load.
+
+        Pages unload all scripts on navigation, so we must re-inject.
+        """
+        if not self._recording:
+            return
+        await self._inject_dom_hook()
+
+    async def _on_binding_called(self, params: dict[str, Any]) -> None:
+        """Handle DOM interaction events from the injected JS hook.
+
+        The JS hook calls window.__phantomBridge(jsonString) which triggers
+        the Runtime.bindingCalled CDP event.
+        """
+        if not self._recording:
+            return
+
+        if params.get("name") != "__phantomBridge":
+            return
+
+        payload_str = params.get("payload", "")
+        if not payload_str:
+            return
+
+        try:
+            data = json.loads(payload_str)
+        except json.JSONDecodeError:
+            logger.debug(
+                "playbook_recorder: invalid DOM event payload: %s",
+                payload_str[:200],
+            )
+            return
+
+        event_type = data.get("type", "")
+        selector = data.get("selector", "")
+
+        if not event_type or not selector:
+            return
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        if event_type == "click":
+            self._add_step(PlaybookStep(
+                action="click",
+                timestamp=now_iso,
+                selector=selector,
+                text=data.get("text") or None,
+                url=data.get("url") or None,
+            ))
+        elif event_type == "type":
+            self._add_step(PlaybookStep(
+                action="type",
+                timestamp=now_iso,
+                selector=selector,
+                value=data.get("value", ""),
+                url=data.get("url") or None,
+            ))
+        elif event_type == "select":
+            self._add_step(PlaybookStep(
+                action="select",
+                timestamp=now_iso,
+                selector=selector,
+                value=data.get("value", ""),
+                url=data.get("url") or None,
+            ))
+        elif event_type == "submit":
+            self._add_step(PlaybookStep(
+                action="submit",
+                timestamp=now_iso,
+                selector=selector,
+                text=data.get("text") or None,
+                value=data.get("value") or None,
+                url=data.get("url") or None,
+            ))
 
     # ------------------------------------------------------------------
     # Playbook management

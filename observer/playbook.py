@@ -20,11 +20,12 @@ from typing import Any
 class PlaybookStep:
     """A single recorded action."""
 
-    action: str  # "navigate", "click", "type", "wait", "scroll", "download", "request"
+    action: str  # "navigate", "click", "type", "select", "submit", "wait", "scroll", "download", "request"
     timestamp: str  # ISO timestamp when this step occurred
     url: str | None = None  # current page URL
     selector: str | None = None  # CSS selector (if applicable)
-    value: str | None = None  # typed text, clicked href, downloaded filename
+    value: str | None = None  # typed text, selected option, clicked href, downloaded filename
+    text: str | None = None  # human-readable element text (e.g. button label)
     wait_ms: int | None = None  # time until the *next* step (for replay pacing)
     method: str | None = None  # HTTP method for request steps
     content_type: str | None = None  # content-type for request steps
@@ -90,6 +91,32 @@ class Playbook:
                     f"    {step_comment}\n"
                     f"    await page.goto({step.url!r})\n"
                     f"    await page.wait_for_load_state('networkidle')\n"
+                    f"    await asyncio.sleep({wait / 1000:.1f})"
+                )
+            elif step.action == "click" and step.selector:
+                label = f"  # {step.text}" if step.text else ""
+                nav_steps.append(
+                    f"    {step_comment}\n"
+                    f"    await page.click({step.selector!r}){label}\n"
+                    f"    await asyncio.sleep({wait / 1000:.1f})"
+                )
+            elif step.action == "type" and step.selector:
+                nav_steps.append(
+                    f"    {step_comment}\n"
+                    f"    await page.fill({step.selector!r}, {step.value!r})\n"
+                    f"    await asyncio.sleep({wait / 1000:.1f})"
+                )
+            elif step.action == "select" and step.selector:
+                nav_steps.append(
+                    f"    {step_comment}\n"
+                    f"    await page.select_option({step.selector!r}, {step.value!r})\n"
+                    f"    await asyncio.sleep({wait / 1000:.1f})"
+                )
+            elif step.action == "submit" and step.selector:
+                label = f"  # submit: {step.text}" if step.text else ""
+                nav_steps.append(
+                    f"    {step_comment}\n"
+                    f"    await page.click({step.selector!r}){label}\n"
                     f"    await asyncio.sleep({wait / 1000:.1f})"
                 )
             elif step.action == "download" and step.value:

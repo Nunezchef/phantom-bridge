@@ -5,6 +5,7 @@ a registry of logged-in domains with session metadata.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import asdict, dataclass, field
@@ -307,6 +308,116 @@ class AuthRegistry:
     def get_registry(self) -> dict[str, dict]:
         """Return current auth registry as a serializable dict."""
         return {domain: entry.to_dict() for domain, entry in self._registry.items()}
+
+    def get_entry(self, domain: str) -> AuthEntry | None:
+        """Return a single auth entry by domain, or None."""
+        return self._registry.get(domain)
+
+    def get_all_domains(self) -> list[str]:
+        """Return all tracked domain names."""
+        return list(self._registry.keys())
+
+    async def check_session_health(self, domain: str) -> dict[str, Any]:
+        """Test if a domain's session is still valid.
+
+        Navigates to the domain's last known URL, checks if we get
+        redirected to a login page.
+
+        Returns: {"domain": str, "healthy": bool, "reason": str}
+        """
+        entry = self._registry.get(domain)
+        if entry is None:
+            return {
+                "domain": domain,
+                "healthy": False,
+                "reason": f"Domain '{domain}' not found in auth registry.",
+            }
+
+        # Choose a URL to test: last_seen or construct from domain
+        test_url: str | None = None
+        if entry.last_seen and entry.last_seen.startswith("http"):
+            test_url = entry.last_seen
+        else:
+            test_url = f"https://{domain}/"
+
+        # Avoid testing a login URL itself — use the domain root instead
+        parsed_test = urlparse(test_url)
+        if any(
+            pattern in (parsed_test.path or "").lower()
+            for pattern in _AUTH_URL_PATTERNS
+        ):
+            test_url = f"{parsed_test.scheme}://{parsed_test.netloc}/"
+
+        # Navigate and watch for redirects to login pages
+        final_url: str | None = None
+        nav_event = asyncio.Event()
+
+        async def on_frame_navigated(params: dict) -> None:
+            nonlocal final_url
+            frame = params.get("frame", {})
+            # Only track top-level frame
+            if frame.get("parentId"):
+                return
+            final_url = frame.get("url", "")
+            nav_event.set()
+
+        await self._cdp.subscribe("Page.frameNavigated", on_frame_navigated)
+
+        try:
+            await self._cdp.send(
+                "Page.navigate", {"url": test_url}
+            )
+
+            # Wait for navigation with a 10-second timeout
+            try:
+                await asyncio.wait_for(nav_event.wait(), timeout=10.0)
+            except asyncio.TimeoutError:
+                return {
+                    "domain": domain,
+                    "healthy": False,
+                    "reason": f"Navigation to {test_url} timed out after 10s.",
+                }
+
+            # Check if final URL looks like a login redirect
+            if final_url:
+                parsed_final = urlparse(final_url)
+                final_path = (parsed_final.path or "").lower()
+                is_login_redirect = any(
+                    pattern in final_path for pattern in _AUTH_URL_PATTERNS
+                )
+
+                if is_login_redirect:
+                    # Session expired — update registry
+                    entry.authenticated = False
+                    self._save()
+                    return {
+                        "domain": domain,
+                        "healthy": False,
+                        "reason": (
+                            f"Redirected to login page: {final_url}. "
+                            "Session appears expired."
+                        ),
+                    }
+
+            # Session is healthy
+            return {
+                "domain": domain,
+                "healthy": True,
+                "reason": f"Page loaded normally at {final_url or test_url}.",
+            }
+
+        except Exception as exc:
+            return {
+                "domain": domain,
+                "healthy": False,
+                "reason": f"Health check failed: {exc}",
+            }
+        finally:
+            # Navigate back to about:blank — don't leave on a random page
+            try:
+                await self._cdp.send("Page.navigate", {"url": "about:blank"})
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------
     # Persistence

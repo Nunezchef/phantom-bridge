@@ -47,25 +47,30 @@
     }
 
     globalThis._phantomBridgeToggle = async function () {
-        if (globalThis._phantomBridgeRunning) {
-            // Already running — open the bridge page
-            window.open("/usr/plugins/phantom_bridge/webui/bridge.html", "_blank");
+        // Toggle the in-app modal (bridge-modal.html handles start logic)
+        if (globalThis._phantomBridgeModalToggle) {
+            await globalThis._phantomBridgeModalToggle();
+            // Update running status after modal toggle
+            checkStatus();
         } else {
-            // Start the bridge, wait for Chrome to be ready, then open
-            try {
-                if (globalThis.toast) globalThis.toast("Starting Phantom Bridge...", "info");
-                const res = await callJsonApi("plugins/phantom_bridge/bridge", { action: "start" });
-                if (res?.running || res?.ok) {
-                    globalThis._phantomBridgeRunning = true;
-                    if (globalThis.toast) globalThis.toast("Bridge is live!", "success");
-                    // Wait for Chrome to be fully ready before opening
-                    await new Promise(r => setTimeout(r, 3000));
-                    window.open("/usr/plugins/phantom_bridge/webui/bridge.html", "_blank");
-                } else {
-                    if (globalThis.toast) globalThis.toast(res?.error || "Failed to start bridge", "error");
+            // Fallback: modal not injected yet, open in new tab
+            if (globalThis._phantomBridgeRunning) {
+                window.open("/usr/plugins/phantom_bridge/webui/bridge.html", "_blank");
+            } else {
+                try {
+                    if (globalThis.toast) globalThis.toast("Starting Phantom Bridge...", "info");
+                    const res = await callJsonApi("plugins/phantom_bridge/bridge", { action: "start" });
+                    if (res?.running || res?.ok) {
+                        globalThis._phantomBridgeRunning = true;
+                        if (globalThis.toast) globalThis.toast("Bridge is live!", "success");
+                        await new Promise(r => setTimeout(r, 3000));
+                        window.open("/usr/plugins/phantom_bridge/webui/bridge.html", "_blank");
+                    } else {
+                        if (globalThis.toast) globalThis.toast(res?.error || "Failed to start bridge", "error");
+                    }
+                } catch (e) {
+                    if (globalThis.toast) globalThis.toast("Error: " + e.message, "error");
                 }
-            } catch (e) {
-                if (globalThis.toast) globalThis.toast("Error: " + e.message, "error");
             }
         }
     };

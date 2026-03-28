@@ -1,0 +1,591 @@
+<!--
+  Phantom Bridge — In-app draggable browser modal
+  Self-contained: CSS + HTML + vanilla JS (no framework dependencies)
+  Injected via modal-shell-end extension point
+-->
+
+<div id="pb-modal" style="display:none;">
+  <!-- Title Bar (drag handle) -->
+  <div id="pb-titlebar">
+    <div id="pb-titlebar-left">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;">
+        <rect width="24" height="24" rx="6" fill="#6366f1"/>
+        <circle cx="12" cy="10" r="4" stroke="white" stroke-width="1.5" fill="none"/>
+        <path d="M8 18c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+      </svg>
+      <span id="pb-title">Phantom Bridge</span>
+      <span id="pb-title-url"></span>
+    </div>
+    <div id="pb-titlebar-buttons">
+      <button id="pb-btn-minimize" title="Minimize">
+        <svg width="12" height="12" viewBox="0 0 12 12"><line x1="2" y1="6" x2="10" y2="6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+      <button id="pb-btn-close" title="Close">
+        <svg width="12" height="12" viewBox="0 0 12 12"><line x1="2" y1="2" x2="10" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="10" y1="2" x2="2" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Collapsible body -->
+  <div id="pb-body">
+    <!-- Tab bar -->
+    <div id="pb-tabs"></div>
+
+    <!-- URL bar -->
+    <div id="pb-urlbar-row">
+      <button id="pb-nav-back" title="Back">&#8592;</button>
+      <button id="pb-nav-refresh" title="Refresh">&#8635;</button>
+      <input id="pb-url-input" type="text" placeholder="Enter URL and press Enter" spellcheck="false" autocomplete="off">
+      <button id="pb-nav-go">Go</button>
+    </div>
+
+    <!-- Screenshot area (focusable for keyboard capture) -->
+    <div id="pb-viewport" tabindex="0">
+      <div id="pb-loading"><span>Connecting...</span></div>
+      <img id="pb-screenshot" alt="Browser view" draggable="false" style="display:none;">
+    </div>
+  </div>
+
+  <!-- Resize handle -->
+  <div id="pb-resize-handle"></div>
+</div>
+
+<style>
+  #pb-modal {
+    position: fixed;
+    z-index: 2500;
+    width: 800px;
+    height: 600px;
+    min-width: 400px;
+    min-height: 300px;
+    bottom: 24px;
+    right: 24px;
+    background: #111113;
+    border: 1px solid #2a2a2e;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-family: system-ui, -apple-system, sans-serif;
+    color: #e0e0e0;
+    user-select: none;
+  }
+
+  /* Title bar */
+  #pb-titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: rgba(26, 26, 30, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid #2a2a2e;
+    cursor: grab;
+    flex-shrink: 0;
+  }
+  #pb-titlebar:active { cursor: grabbing; }
+
+  #pb-titlebar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+    min-width: 0;
+  }
+  #pb-title {
+    font-size: 0.85em;
+    font-weight: 600;
+    white-space: nowrap;
+    color: #a5b4fc;
+  }
+  #pb-title-url {
+    font-size: 0.75em;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    opacity: 0.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+
+  #pb-titlebar-buttons {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+    margin-left: 12px;
+  }
+  #pb-titlebar-buttons button {
+    width: 24px; height: 24px;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: #888;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  #pb-titlebar-buttons button:hover {
+    background: rgba(255,255,255,0.08);
+    color: #ccc;
+  }
+  #pb-btn-close:hover {
+    background: rgba(239, 68, 68, 0.2) !important;
+    color: #ef4444 !important;
+  }
+
+  /* Body */
+  #pb-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  #pb-modal.pb-minimized #pb-body { display: none; }
+  #pb-modal.pb-minimized #pb-resize-handle { display: none; }
+  #pb-modal.pb-minimized { height: auto !important; min-height: 0 !important; }
+
+  /* Tab bar */
+  #pb-tabs {
+    display: flex;
+    gap: 3px;
+    padding: 6px 10px;
+    background: #131315;
+    border-bottom: 1px solid #222226;
+    overflow-x: auto;
+    flex-shrink: 0;
+  }
+  #pb-tabs:empty { display: none; }
+  .pb-tab {
+    padding: 4px 12px;
+    background: #1a1a1e;
+    border: 1px solid #2a2a2e;
+    border-radius: 6px;
+    font-size: 0.75em;
+    cursor: pointer;
+    white-space: nowrap;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #aaa;
+    transition: all 0.15s;
+  }
+  .pb-tab:hover { background: #222226; color: #ddd; }
+  .pb-tab.active {
+    background: rgba(99, 102, 241, 0.12);
+    border-color: #6366f1;
+    color: #a5b4fc;
+  }
+
+  /* URL bar */
+  #pb-urlbar-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: #131315;
+    border-bottom: 1px solid #222226;
+    flex-shrink: 0;
+  }
+  #pb-url-input {
+    flex: 1;
+    padding: 6px 10px;
+    background: #1a1a1e;
+    border: 1px solid #2a2a2e;
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-size: 0.8em;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    outline: none;
+  }
+  #pb-url-input:focus { border-color: #6366f1; }
+  #pb-urlbar-row button {
+    padding: 5px 10px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8em;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+  #pb-nav-go {
+    background: #6366f1;
+    color: white;
+  }
+  #pb-nav-go:hover { background: #5558e6; }
+  #pb-nav-back, #pb-nav-refresh {
+    background: #222226;
+    color: #aaa;
+  }
+  #pb-nav-back:hover, #pb-nav-refresh:hover {
+    background: #2a2a2e;
+    color: #ddd;
+  }
+
+  /* Viewport */
+  #pb-viewport {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: #0a0a0c;
+    cursor: pointer;
+    outline: none;
+    min-height: 0;
+  }
+  #pb-viewport:focus {
+    box-shadow: inset 0 0 0 2px rgba(99, 102, 241, 0.3);
+  }
+  #pb-screenshot {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  #pb-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85em;
+    opacity: 0.4;
+  }
+
+  /* Resize handle */
+  #pb-resize-handle {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 18px;
+    height: 18px;
+    cursor: nwse-resize;
+    z-index: 10;
+  }
+  #pb-resize-handle::after {
+    content: '';
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid #444;
+    border-bottom: 2px solid #444;
+    opacity: 0.5;
+  }
+  #pb-resize-handle:hover::after { opacity: 0.8; }
+</style>
+
+<script>
+(function() {
+  // ── State ──
+  let currentPageId = null;
+  let pages = [];
+  let screenshotTimer = null;
+  let pagesTimer = null;
+  let keyDebounceTimer = null;
+  let isMinimized = false;
+  let isDragging = false;
+  let isResizing = false;
+
+  // ── DOM refs ──
+  const modal     = document.getElementById("pb-modal");
+  const titlebar  = document.getElementById("pb-titlebar");
+  const btnMin    = document.getElementById("pb-btn-minimize");
+  const btnClose  = document.getElementById("pb-btn-close");
+  const tabsBar   = document.getElementById("pb-tabs");
+  const urlInput  = document.getElementById("pb-url-input");
+  const btnGo     = document.getElementById("pb-nav-go");
+  const btnBack   = document.getElementById("pb-nav-back");
+  const btnRefresh = document.getElementById("pb-nav-refresh");
+  const viewport  = document.getElementById("pb-viewport");
+  const imgEl     = document.getElementById("pb-screenshot");
+  const loadingEl = document.getElementById("pb-loading");
+  const titleUrl  = document.getElementById("pb-title-url");
+  const resizeHandle = document.getElementById("pb-resize-handle");
+
+  // ── API helper ──
+  let _callJsonApi = null;
+  async function getApi() {
+    if (!_callJsonApi) {
+      const mod = await import("/js/api.js");
+      _callJsonApi = mod.callJsonApi;
+    }
+    return _callJsonApi;
+  }
+  async function api(endpoint, body) {
+    const fn = await getApi();
+    return fn("plugins/phantom_bridge/" + endpoint, body);
+  }
+
+  // ── Show / Hide ──
+  function show() {
+    modal.style.display = "flex";
+    startPolling();
+    // Focus viewport for keyboard
+    setTimeout(() => viewport.focus(), 100);
+  }
+
+  function hide() {
+    modal.style.display = "none";
+    stopPolling();
+  }
+
+  function toggleMinimize() {
+    isMinimized = !isMinimized;
+    modal.classList.toggle("pb-minimized", isMinimized);
+  }
+
+  // ── Global toggle (called by chat bar button) ──
+  globalThis._phantomBridgeModalToggle = async function() {
+    if (modal.style.display === "none" || modal.style.display === "") {
+      // Check/start bridge
+      try {
+        const status = await api("bridge", { action: "status" });
+        if (!status.running) {
+          if (globalThis.toast) globalThis.toast("Starting Phantom Bridge...", "info");
+          await api("bridge", { action: "start" });
+          await new Promise(r => setTimeout(r, 2500));
+          if (globalThis.toast) globalThis.toast("Bridge is live!", "success");
+        }
+      } catch(e) {
+        if (globalThis.toast) globalThis.toast("Bridge error: " + e.message, "error");
+        return;
+      }
+      show();
+    } else {
+      hide();
+    }
+  };
+
+  // Expose visibility check for the chat bar button
+  globalThis._phantomBridgeModalVisible = function() {
+    return modal.style.display === "flex";
+  };
+
+  // ── Polling ──
+  function startPolling() {
+    refreshPages();
+    takeScreenshot();
+    pagesTimer = setInterval(refreshPages, 5000);
+    screenshotTimer = setInterval(takeScreenshot, 1500);
+  }
+
+  function stopPolling() {
+    clearInterval(pagesTimer);
+    clearInterval(screenshotTimer);
+    pagesTimer = null;
+    screenshotTimer = null;
+  }
+
+  // ── Pages ──
+  async function refreshPages() {
+    try {
+      const data = await api("proxy", { action: "pages" });
+      if (!data.ok || !data.pages) return;
+      pages = data.pages.filter(p => p.type === "page");
+
+      // Auto-select first page
+      if (!currentPageId && pages.length > 0) {
+        currentPageId = pages[0].id;
+      }
+
+      // Render tabs
+      tabsBar.innerHTML = pages.map(p => {
+        const label = p.title || p.url || "New Tab";
+        const cls = p.id === currentPageId ? "pb-tab active" : "pb-tab";
+        return '<div class="' + cls + '" data-page-id="' + p.id + '" title="' + (p.url || '') + '">' + escHtml(label) + '</div>';
+      }).join("");
+
+      // Update URL display
+      const active = pages.find(p => p.id === currentPageId);
+      if (active) {
+        urlInput.value = active.url || "";
+        titleUrl.textContent = active.url || "";
+      }
+    } catch(e) { /* bridge not ready */ }
+  }
+
+  // Tab click delegation
+  tabsBar.addEventListener("click", function(e) {
+    const tab = e.target.closest(".pb-tab");
+    if (tab && tab.dataset.pageId) {
+      currentPageId = tab.dataset.pageId;
+      refreshPages();
+      takeScreenshot();
+    }
+  });
+
+  // ── Screenshot ──
+  async function takeScreenshot() {
+    if (!currentPageId) return;
+    try {
+      const data = await api("proxy", { action: "screenshot", page_id: currentPageId });
+      if (data.ok && data.screenshot) {
+        imgEl.src = "data:image/jpeg;base64," + data.screenshot;
+        imgEl.style.display = "block";
+        loadingEl.style.display = "none";
+      }
+    } catch(e) { /* ignore */ }
+  }
+
+  // ── Navigate ──
+  async function navigate() {
+    let url = urlInput.value.trim();
+    if (!url) return;
+    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+      url = "https://" + url;
+    }
+    if (!currentPageId && pages.length > 0) currentPageId = pages[0].id;
+    if (!currentPageId) return;
+
+    await api("proxy", { action: "navigate", page_id: currentPageId, url: url });
+    urlInput.value = url;
+    setTimeout(takeScreenshot, 1000);
+    setTimeout(refreshPages, 1500);
+  }
+
+  btnGo.addEventListener("click", navigate);
+  urlInput.addEventListener("keydown", function(e) {
+    if (e.key === "Enter") { navigate(); e.preventDefault(); }
+    e.stopPropagation(); // Don't send URL bar keys to the bridge
+  });
+
+  btnBack.addEventListener("click", function() { takeScreenshot(); refreshPages(); });
+  btnRefresh.addEventListener("click", function() { takeScreenshot(); refreshPages(); });
+  btnMin.addEventListener("click", toggleMinimize);
+  btnClose.addEventListener("click", hide);
+
+  // ── Click to interact ──
+  imgEl.addEventListener("click", async function(e) {
+    if (!currentPageId) return;
+    if (!imgEl.naturalWidth) return;
+
+    const rect = imgEl.getBoundingClientRect();
+    const scaleX = 1280 / rect.width;
+    const scaleY = 900 / rect.height;
+    const x = Math.round((e.clientX - rect.left) * scaleX);
+    const y = Math.round((e.clientY - rect.top) * scaleY);
+
+    try {
+      await api("click", { page_id: currentPageId, x: x, y: y });
+      // Focus viewport for keyboard after click
+      viewport.focus();
+      setTimeout(takeScreenshot, 500);
+      setTimeout(refreshPages, 1000);
+    } catch(err) {
+      console.error("Bridge click failed:", err);
+    }
+  });
+
+  // ── Keyboard input ──
+  viewport.addEventListener("keydown", function(e) {
+    // Don't capture if URL input is focused
+    if (document.activeElement === urlInput) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    sendKey(e);
+  });
+
+  viewport.addEventListener("keyup", function(e) {
+    if (document.activeElement === urlInput) return;
+    e.preventDefault();
+    e.stopPropagation();
+    // keyUp is already sent as part of "full" dispatch
+  });
+
+  async function sendKey(e) {
+    if (!currentPageId) return;
+
+    const modifiers = {};
+    if (e.shiftKey) modifiers.shift = true;
+    if (e.ctrlKey) modifiers.ctrl = true;
+    if (e.altKey) modifiers.alt = true;
+    if (e.metaKey) modifiers.meta = true;
+
+    try {
+      await api("keyboard", {
+        page_id: currentPageId,
+        key: e.key,
+        code: e.code,
+        text: e.key.length === 1 ? e.key : "",
+        modifiers: modifiers,
+        type: "full"
+      });
+    } catch(err) {
+      console.error("Bridge keyboard failed:", err);
+    }
+
+    // Debounced screenshot refresh after typing
+    clearTimeout(keyDebounceTimer);
+    keyDebounceTimer = setTimeout(takeScreenshot, 300);
+  }
+
+  // ── Drag ──
+  let dragOffsetX = 0, dragOffsetY = 0;
+
+  titlebar.addEventListener("mousedown", function(e) {
+    // Don't drag if clicking buttons
+    if (e.target.closest("#pb-titlebar-buttons")) return;
+
+    isDragging = true;
+    const rect = modal.getBoundingClientRect();
+    dragOffsetX = e.clientX - rect.left;
+    dragOffsetY = e.clientY - rect.top;
+
+    // Switch from bottom/right positioning to top/left for drag
+    modal.style.top = rect.top + "px";
+    modal.style.left = rect.left + "px";
+    modal.style.bottom = "auto";
+    modal.style.right = "auto";
+
+    e.preventDefault();
+  });
+
+  document.addEventListener("mousemove", function(e) {
+    if (isDragging) {
+      const x = Math.max(0, Math.min(e.clientX - dragOffsetX, window.innerWidth - 100));
+      const y = Math.max(0, Math.min(e.clientY - dragOffsetY, window.innerHeight - 40));
+      modal.style.left = x + "px";
+      modal.style.top = y + "px";
+      e.preventDefault();
+    }
+
+    if (isResizing) {
+      const rect = modal.getBoundingClientRect();
+      const newW = Math.max(400, e.clientX - rect.left);
+      const newH = Math.max(300, e.clientY - rect.top);
+      modal.style.width = newW + "px";
+      modal.style.height = newH + "px";
+      e.preventDefault();
+    }
+  });
+
+  document.addEventListener("mouseup", function() {
+    isDragging = false;
+    isResizing = false;
+  });
+
+  // ── Resize ──
+  resizeHandle.addEventListener("mousedown", function(e) {
+    isResizing = true;
+    // Ensure positioned with top/left for resize to work properly
+    const rect = modal.getBoundingClientRect();
+    modal.style.top = rect.top + "px";
+    modal.style.left = rect.left + "px";
+    modal.style.bottom = "auto";
+    modal.style.right = "auto";
+    e.preventDefault();
+    e.stopPropagation();
+  });
+
+  // ── Utility ──
+  function escHtml(s) {
+    const d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  }
+})();
+</script>

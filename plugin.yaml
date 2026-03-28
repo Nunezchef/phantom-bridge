@@ -1,0 +1,12 @@
+name: browser_bridge
+title: Browser Bridge
+description: >
+  Expose A0's internal Chromium browser to the host machine via Chrome
+  DevTools Protocol (remote debugging port). Users connect from their host
+  browser, log into any service, and A0's browser agent inherits those
+  authenticated sessions.
+version: 0.1.0
+settings_sections:
+  - external
+per_project_config: false
+per_agent_config: false

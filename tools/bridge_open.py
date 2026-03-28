@@ -1,0 +1,103 @@
+"""
+browser_bridge_open — A0 tool to start the Browser Bridge.
+
+Launches Chromium with remote debugging enabled so the user can connect
+from their host browser to log into services inside the container.
+"""
+
+from __future__ import annotations
+
+import logging
+from pathlib import Path
+from typing import Any
+
+from python.helpers.tool import Tool, Response
+
+logger = logging.getLogger("browser_bridge")
+
+
+class BrowserBridgeOpen(Tool):
+
+    async def execute(self, **kwargs: Any) -> Response:
+        from plugins.browser_bridge.bridge import (
+            get_bridge,
+            create_bridge_from_config,
+        )
+
+        # Load config
+        config = self._load_config()
+
+        # Check if already running
+        bridge = get_bridge()
+        if bridge and bridge.is_running():
+            status = bridge.status()
+            return Response(
+                message=(
+                    f"Browser bridge is already running.\n"
+                    f"Connect URL: {status.get('connect_url', 'http://localhost:9222')}\n"
+                    f"Uptime: {status.get('uptime_seconds', 0)}s\n"
+                    f"Open pages: {status.get('page_count', 0)}\n\n"
+                    f"Tell the user to open the Connect URL in their host Chrome browser."
+                ),
+                break_loop=False,
+            )
+
+        # Create and start
+        bridge = create_bridge_from_config(config)
+
+        try:
+            status = await bridge.start()
+        except RuntimeError as e:
+            return Response(
+                message=f"Failed to start browser bridge: {e}",
+                break_loop=False,
+            )
+
+        port = status.get("port", 9222)
+        connect_url = status.get("connect_url", f"http://localhost:{port}")
+
+        return Response(
+            message=(
+                f"Browser bridge is live!\n\n"
+                f"Connect URL: {connect_url}\n"
+                f"Profile: {status.get('profile_dir', 'unknown')}\n\n"
+                f"Instructions for the user:\n"
+                f"1. Open {connect_url} in your host Chrome browser\n"
+                f"2. Click the inspectable page link to see the container's browser\n"
+                f"3. Navigate to any service and log in (Google, NotebookLM, X, etc.)\n"
+                f"4. All cookies and sessions persist in the container\n"
+                f"5. When done, tell me to close the bridge\n\n"
+                f"After the user logs in, my browser_agent tool will have access "
+                f"to those authenticated sessions automatically."
+            ),
+            break_loop=False,
+        )
+
+    def _load_config(self) -> dict[str, Any]:
+        """Load plugin configuration."""
+        try:
+            from helpers.plugins import get_plugin_config
+            return get_plugin_config("browser_bridge", agent=self.agent) or {}
+        except ImportError:
+            pass
+
+        # Fallback: load default_config.yaml directly
+        try:
+            import yaml
+
+            config_path = Path(__file__).resolve().parent.parent / "default_config.yaml"
+            if config_path.exists():
+                with open(config_path) as f:
+                    return yaml.safe_load(f) or {}
+        except ImportError:
+            pass
+
+        return {}
+
+    def get_log_object(self):
+        return self.agent.context.log.log(
+            type="tool",
+            heading=f"icon://language {self.agent.agent_name}: Opening Browser Bridge",
+            content="",
+            kvps=self.args,
+        )

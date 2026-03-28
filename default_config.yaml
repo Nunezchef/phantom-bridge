@@ -1,0 +1,26 @@
+# Browser Bridge Plugin — default configuration
+# These values are used unless overridden in the A0 plugin settings UI.
+
+enabled: true
+
+# Chrome DevTools Protocol port exposed for host-browser connection
+remote_debug_port: 9222
+
+# Persistent browser profile directory (relative to plugin dir).
+# Survives container restarts when usr/ is volume-mounted.
+profile_dir: data/profile
+
+# Chromium launch options
+headless: false
+window_width: 1280
+window_height: 900
+
+# Default URL opened when bridge starts
+default_url: "about:blank"
+
+# Auto-close bridge after N seconds of inactivity (0 = never)
+auto_close_seconds: 0
+
+# Bind address for the debug port inside the container
+# Use 0.0.0.0 to allow connections from host via port mapping
+bind_address: "0.0.0.0"

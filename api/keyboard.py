@@ -5,7 +5,7 @@ import urllib.request
 from helpers.api import ApiHandler, Request, Response
 
 
-# Common key → windowsVirtualKeyCode mappings
+# Common key -> windowsVirtualKeyCode mappings
 KEY_CODES = {
     "Enter": 13,
     "Backspace": 8,
@@ -20,16 +20,17 @@ KEY_CODES = {
     "End": 35,
     "PageUp": 33,
     "PageDown": 34,
-    "Shift": 16,
-    "Control": 17,
-    "Alt": 18,
-    "Meta": 91,
-    "CapsLock": 20,
     "Space": 32,
-    " ": 32,
-    "F1": 112, "F2": 113, "F3": 114, "F4": 115,
-    "F5": 116, "F6": 117, "F7": 118, "F8": 119,
-    "F9": 120, "F10": 121, "F11": 122, "F12": 123,
+}
+
+# Keys that should NOT produce a "char" event
+NON_PRINTABLE_KEYS = {
+    "Enter", "Backspace", "Tab", "Escape", "Delete",
+    "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+    "Home", "End", "PageUp", "PageDown",
+    "Shift", "Control", "Alt", "Meta", "CapsLock",
+    "F1", "F2", "F3", "F4", "F5", "F6",
+    "F7", "F8", "F9", "F10", "F11", "F12",
 }
 
 
@@ -43,18 +44,97 @@ def _virtual_key_code(key: str) -> int:
     return 0
 
 
-def _modifier_flags(modifiers: dict) -> int:
-    """Build CDP modifier bitmask from a modifiers dict."""
-    flags = 0
-    if modifiers.get("alt"):
-        flags |= 1
-    if modifiers.get("ctrl"):
-        flags |= 2
-    if modifiers.get("meta"):
-        flags |= 4
-    if modifiers.get("shift"):
-        flags |= 8
-    return flags
+def _resolve_modifiers(modifiers) -> int:
+    """Accept modifiers as int bitmask or dict. Returns int bitmask.
+
+    Bitmask: Alt=1, Ctrl=2, Meta=4, Shift=8.
+    """
+    if isinstance(modifiers, int):
+        return modifiers
+    if isinstance(modifiers, dict):
+        flags = 0
+        if modifiers.get("alt"):
+            flags |= 1
+        if modifiers.get("ctrl"):
+            flags |= 2
+        if modifiers.get("meta"):
+            flags |= 4
+        if modifiers.get("shift"):
+            flags |= 8
+        return flags
+    return 0
+
+
+def _is_printable(key: str) -> bool:
+    """Return True if the key produces a visible character."""
+    return key not in NON_PRINTABLE_KEYS and len(key) == 1
+
+
+async def _send_key(ws, msg_id: int, key: str, code: str, text: str, modifiers: int) -> int:
+    """Send keyDown + optional char + keyUp for one keystroke. Returns next msg_id."""
+    vkc = _virtual_key_code(key)
+    printable = _is_printable(key)
+
+    # 1. keyDown
+    await ws.send(json.dumps({
+        "id": msg_id,
+        "method": "Input.dispatchKeyEvent",
+        "params": {
+            "type": "keyDown",
+            "key": key,
+            "code": code or key,
+            "windowsVirtualKeyCode": vkc,
+            "nativeVirtualKeyCode": vkc,
+            "modifiers": modifiers,
+        }
+    }))
+    await ws.recv()
+    msg_id += 1
+
+    # 2. char (only for printable characters)
+    if printable:
+        char_text = text or key
+        await ws.send(json.dumps({
+            "id": msg_id,
+            "method": "Input.dispatchKeyEvent",
+            "params": {
+                "type": "char",
+                "text": char_text,
+                "key": key,
+                "code": code or key,
+                "modifiers": modifiers,
+            }
+        }))
+        await ws.recv()
+        msg_id += 1
+
+    # 3. keyUp
+    await ws.send(json.dumps({
+        "id": msg_id,
+        "method": "Input.dispatchKeyEvent",
+        "params": {
+            "type": "keyUp",
+            "key": key,
+            "code": code or key,
+            "windowsVirtualKeyCode": vkc,
+            "nativeVirtualKeyCode": vkc,
+            "modifiers": modifiers,
+        }
+    }))
+    await ws.recv()
+    msg_id += 1
+
+    return msg_id
+
+
+def _find_ws_url(page_id: str) -> str | None:
+    """Look up the WebSocket debugger URL for a given page_id."""
+    with urllib.request.urlopen("http://127.0.0.1:9222/json", timeout=3) as resp:
+        pages = json.loads(resp.read().decode())
+    for page in pages:
+        if page.get("id") == page_id:
+            return page.get("webSocketDebuggerUrl")
+    return None
 
 
 class KeyboardHandler(ApiHandler):
@@ -65,93 +145,57 @@ class KeyboardHandler(ApiHandler):
 
     async def process(self, input: dict, request: Request) -> dict:
         page_id = input.get("page_id", "")
-        key = input.get("key", "")
-        code = input.get("code", "")
-        text = input.get("text", "")
-        modifiers = input.get("modifiers", {})
-        event_type = input.get("type", "full")  # "full" | "keyDown" | "keyUp" | "char"
+        action = input.get("action", "key")  # "key" | "type_text"
 
         if not page_id:
             return {"ok": False, "error": "page_id required"}
-        if not key:
-            return {"ok": False, "error": "key required"}
 
         try:
             import websockets
 
-            # Find page WebSocket URL
-            with urllib.request.urlopen("http://127.0.0.1:9222/json", timeout=3) as resp:
-                pages = json.loads(resp.read().decode())
-
-            ws_url = None
-            for page in pages:
-                if page.get("id") == page_id:
-                    ws_url = page.get("webSocketDebuggerUrl")
-                    break
-
+            ws_url = _find_ws_url(page_id)
             if not ws_url:
                 return {"ok": False, "error": f"Page {page_id} not found"}
 
-            vkc = _virtual_key_code(key)
-            mod_flags = _modifier_flags(modifiers)
-            msg_id = 1
-
-            # Determine if this is a printable character (needs char event)
-            is_printable = len(key) == 1 and not modifiers.get("ctrl") and not modifiers.get("meta")
-
-            async with websockets.connect(ws_url) as ws:
-                if event_type in ("full", "keyDown"):
-                    # keyDown
-                    await ws.send(json.dumps({
-                        "id": msg_id,
-                        "method": "Input.dispatchKeyEvent",
-                        "params": {
-                            "type": "keyDown",
-                            "key": key,
-                            "code": code or key,
-                            "windowsVirtualKeyCode": vkc,
-                            "nativeVirtualKeyCode": vkc,
-                            "modifiers": mod_flags,
-                        }
-                    }))
-                    await ws.recv()
-                    msg_id += 1
-
-                if event_type in ("full", "char"):
-                    # char event (only for printable characters)
-                    char_text = text or (key if is_printable else "")
-                    if char_text:
-                        await ws.send(json.dumps({
-                            "id": msg_id,
-                            "method": "Input.dispatchKeyEvent",
-                            "params": {
-                                "type": "char",
-                                "text": char_text,
-                                "key": key,
-                                "code": code or key,
-                                "modifiers": mod_flags,
-                            }
-                        }))
-                        await ws.recv()
-                        msg_id += 1
-
-                if event_type in ("full", "keyUp"):
-                    # keyUp
-                    await ws.send(json.dumps({
-                        "id": msg_id,
-                        "method": "Input.dispatchKeyEvent",
-                        "params": {
-                            "type": "keyUp",
-                            "key": key,
-                            "code": code or key,
-                            "windowsVirtualKeyCode": vkc,
-                            "nativeVirtualKeyCode": vkc,
-                            "modifiers": mod_flags,
-                        }
-                    }))
-                    await ws.recv()
-
-            return {"ok": True, "key": key, "code": code or key}
+            if action == "type_text":
+                return await self._type_text(ws_url, input)
+            else:
+                return await self._single_key(ws_url, input)
 
         except Exception as e:
             return {"ok": False, "error": str(e)}
+
+    async def _single_key(self, ws_url: str, input: dict) -> dict:
+        """Handle a single keystroke (keyDown + char + keyUp)."""
+        import websockets
+
+        key = input.get("key", "")
+        code = input.get("code", "")
+        text = input.get("text", "")
+        modifiers = _resolve_modifiers(input.get("modifiers", 0))
+
+        if not key:
+            return {"ok": False, "error": "key required"}
+
+        async with websockets.connect(ws_url) as ws:
+            await _send_key(ws, 1, key, code, text, modifiers)
+
+        return {"ok": True, "key": key, "code": code or key}
+
+    async def _type_text(self, ws_url: str, input: dict) -> dict:
+        """Type a full string by sending keyDown+char+keyUp for each character."""
+        import websockets
+
+        text = input.get("text", "")
+        if not text:
+            return {"ok": False, "error": "text required for type_text action"}
+
+        modifiers = _resolve_modifiers(input.get("modifiers", 0))
+        msg_id = 1
+
+        async with websockets.connect(ws_url) as ws:
+            for char in text:
+                code = f"Key{char.upper()}" if char.isalpha() else ""
+                msg_id = await _send_key(ws, msg_id, char, code, char, modifiers)
+
+        return {"ok": True, "typed": text, "length": len(text)}

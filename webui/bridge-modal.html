@@ -322,6 +322,7 @@
   // ── Show / Hide ──
   function show() {
     modal.style.display = "flex";
+    globalThis._phantomBridgeModalVisible = true;
     startPolling();
     // Focus viewport for keyboard
     setTimeout(() => viewport.focus(), 100);
@@ -329,6 +330,7 @@
 
   function hide() {
     modal.style.display = "none";
+    globalThis._phantomBridgeModalVisible = false;
     stopPolling();
   }
 
@@ -359,10 +361,8 @@
     }
   };
 
-  // Expose visibility check for the chat bar button
-  globalThis._phantomBridgeModalVisible = function() {
-    return modal.style.display === "flex";
-  };
+  // Expose visibility state for the chat bar button (boolean, not function)
+  globalThis._phantomBridgeModalVisible = false;
 
   // ── Polling ──
   function startPolling() {

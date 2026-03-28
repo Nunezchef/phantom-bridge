@@ -1,5 +1,9 @@
 import { createStore } from "/js/AlpineStore.js";
-import { callJsonApi } from "/js/api.js";
+
+async function api(endpoint, body = {}) {
+    const { callJsonApi } = await import("/js/api.js");
+    return await callJsonApi(`plugins/phantom_bridge/${endpoint}`, body);
+}
 
 export const store = createStore("phantomBridge", {
     running: false,
@@ -29,11 +33,11 @@ export const store = createStore("phantomBridge", {
 
     async fetchStatus() {
         try {
-            const status = await callJsonApi("plugins/phantom_bridge/bridge", { action: "status" });
+            const status = await api("bridge", { action: "status" });
             this.running = status.running || false;
             this.connectUrl = status.connect_url || "";
 
-            const auth = await callJsonApi("plugins/phantom_bridge/bridge", { action: "auth_registry" });
+            const auth = await api("bridge", { action: "auth_registry" });
             const registry = auth.registry || {};
             this.authEntries = Object.entries(registry).map(([domain, entry]) => ({
                 domain,
@@ -42,7 +46,7 @@ export const store = createStore("phantomBridge", {
             }));
             this.authCount = this.authEntries.length;
 
-            const sm = await callJsonApi("plugins/phantom_bridge/bridge", { action: "sitemaps" });
+            const sm = await api("bridge", { action: "sitemaps" });
             const sitemaps = sm.sitemaps || {};
             this.sitemapEntries = Object.entries(sitemaps).map(([domain, s]) => ({
                 domain,
@@ -50,7 +54,7 @@ export const store = createStore("phantomBridge", {
             }));
             this.sitemapCount = this.sitemapEntries.length;
 
-            const pb = await callJsonApi("plugins/phantom_bridge/bridge", { action: "playbooks" });
+            const pb = await api("bridge", { action: "playbooks" });
             this.playbooks = pb.playbooks || [];
             this.playbookCount = this.playbooks.length;
         } catch (e) {
@@ -60,7 +64,7 @@ export const store = createStore("phantomBridge", {
 
     async startBridge() {
         try {
-            await callJsonApi("plugins/phantom_bridge/bridge", { action: "start" });
+            await api("bridge", { action: "start" });
             await this.fetchStatus();
         } catch (e) {
             console.error("Failed to start bridge:", e);
@@ -69,7 +73,7 @@ export const store = createStore("phantomBridge", {
 
     async stopBridge() {
         try {
-            await callJsonApi("plugins/phantom_bridge/bridge", { action: "stop" });
+            await api("bridge", { action: "stop" });
             this.running = false;
             await this.fetchStatus();
         } catch (e) {

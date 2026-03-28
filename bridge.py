@@ -274,6 +274,23 @@ class BrowserBridge:
         except ImportError:
             pass
 
+        # Try Playwright cache directly (common Docker paths)
+        for cache_root in [
+            Path.home() / ".cache" / "ms-playwright",
+            Path("/a0/tmp/playwright"),
+            Path("/tmp/playwright"),
+        ]:
+            if cache_root.exists():
+                for pattern in (
+                    "chromium-*/chrome-linux/chrome",
+                    "chromium-*/chrome-*/chrome",
+                    "chromium-*/chrome-*/Chromium.app/Contents/MacOS/Chromium",
+                ):
+                    match = next(cache_root.glob(pattern), None)
+                    if match and match.exists():
+                        logger.info("browser_bridge: found Chromium at %s", match)
+                        return str(match)
+
         # Try system Chromium / Chrome
         for name in [
             "chromium-browser",

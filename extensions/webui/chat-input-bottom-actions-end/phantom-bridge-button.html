@@ -31,12 +31,53 @@
 </button>
 
 <script>
-    (async () => {
+(async () => {
     const { callJsonApi } = await import("/js/api.js");
 
     globalThis._phantomBridgeRunning = false;
+    let modalInjected = false;
 
-    // Poll bridge status
+    // Inject the modal HTML into the page on first use
+    async function ensureModalInjected() {
+        if (modalInjected || document.getElementById('phantom-bridge-modal')) {
+            modalInjected = true;
+            return true;
+        }
+        try {
+            const resp = await fetch("/usr/plugins/phantom_bridge/webui/bridge-modal.html");
+            if (!resp.ok) return false;
+            const html = await resp.text();
+            const container = document.createElement('div');
+            container.innerHTML = html;
+
+            // Extract and execute scripts separately
+            const scripts = container.querySelectorAll('script');
+            const scriptContents = [];
+            scripts.forEach(s => {
+                scriptContents.push(s.textContent);
+                s.remove();
+            });
+
+            // Inject HTML (styles + DOM)
+            document.body.appendChild(container);
+
+            // Execute scripts
+            for (const code of scriptContents) {
+                const scriptEl = document.createElement('script');
+                scriptEl.textContent = code;
+                document.body.appendChild(scriptEl);
+            }
+
+            modalInjected = true;
+            // Wait a tick for scripts to initialize
+            await new Promise(r => setTimeout(r, 100));
+            return true;
+        } catch (e) {
+            console.error('[phantom_bridge] Failed to inject modal:', e);
+            return false;
+        }
+    }
+
     async function checkStatus() {
         try {
             const res = await callJsonApi("plugins/phantom_bridge/bridge", { action: "status" });
@@ -47,13 +88,14 @@
     }
 
     globalThis._phantomBridgeToggle = async function () {
-        // Toggle the in-app modal (bridge-modal.html handles start logic)
-        if (globalThis._phantomBridgeModalToggle) {
+        // Inject modal if not already done
+        const injected = await ensureModalInjected();
+
+        if (injected && globalThis._phantomBridgeModalToggle) {
             await globalThis._phantomBridgeModalToggle();
-            // Update running status after modal toggle
             checkStatus();
         } else {
-            // Fallback: modal not injected yet, open in new tab
+            // Final fallback: open in new tab
             if (globalThis._phantomBridgeRunning) {
                 window.open("/usr/plugins/phantom_bridge/webui/bridge.html", "_blank");
             } else {
@@ -75,8 +117,7 @@
         }
     };
 
-    // Check status on load and every 30s
     checkStatus();
     setInterval(checkStatus, 30000);
-    })();
+})();
 </script>

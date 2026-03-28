@@ -1,0 +1,178 @@
+<html>
+<head>
+    <title>Phantom Bridge</title>
+    <script type="module" src="/plugins/phantom_bridge/webui/phantom-bridge-store.js"></script>
+    <style>
+        .pb { font-family: system-ui, -apple-system, sans-serif; color: inherit; }
+        .pb-card { background: color-mix(in srgb, currentColor 8%, transparent); border: 1px solid color-mix(in srgb, currentColor 12%, transparent); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+        .pb-mono { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85em; }
+        .pb-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .pb-dot-on { background: #22c55e; box-shadow: 0 0 6px #22c55e66; }
+        .pb-dot-off { background: #64748b; }
+
+        .pb-open-btn {
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            width: 100%; padding: 14px 20px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white; font-size: 1em; font-weight: 600;
+            border: none; border-radius: 10px; cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .pb-open-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px #8b5cf633; }
+        .pb-open-btn:active { transform: translateY(0); }
+        .pb-open-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        .pb-start-btn {
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            width: 100%; padding: 12px 16px;
+            background: #22c55e22; border: 1px solid #22c55e44;
+            color: #22c55e; font-size: 0.9em; font-weight: 600;
+            border-radius: 10px; cursor: pointer; transition: all 0.2s;
+        }
+        .pb-start-btn:hover { background: #22c55e33; }
+
+        .pb-stop-btn {
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            width: 100%; padding: 10px 16px;
+            background: #ef444422; border: 1px solid #ef444444;
+            color: #ef4444; font-size: 0.85em; font-weight: 500;
+            border-radius: 10px; cursor: pointer; transition: all 0.2s; margin-top: 8px;
+        }
+        .pb-stop-btn:hover { background: #ef444433; }
+
+        .pb-auth-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 0.85em; }
+        .pb-auth-domain { font-weight: 600; }
+        .pb-auth-status { font-size: 0.75em; opacity: 0.5; }
+        .pb-section-title { font-size: 0.9em; font-weight: 600; margin-bottom: 8px; }
+        .pb-empty { font-size: 0.8em; opacity: 0.4; font-style: italic; }
+    </style>
+</head>
+<body>
+    <div x-data>
+        <template x-if="$store.phantomBridge">
+            <div class="pb" x-init="$store.phantomBridge.onOpen()" x-destroy="$store.phantomBridge.cleanup()">
+
+                <!-- Header -->
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;">
+                        <rect width="24" height="24" rx="6" fill="#6366f1"/>
+                        <circle cx="12" cy="10" r="4" stroke="white" stroke-width="1.5" fill="none"/>
+                        <path d="M8 18c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+                        <circle cx="12" cy="10" r="1.5" fill="white" opacity="0.5"/>
+                    </svg>
+                    <div>
+                        <h2 style="margin:0; font-size:1.1em;">Phantom Bridge</h2>
+                        <p style="margin:0; font-size:0.75em; opacity:0.5;">Log in once. A0 uses it forever.</p>
+                    </div>
+                    <div style="margin-left:auto; display:flex; align-items:center; gap:6px;">
+                        <span class="pb-dot" :class="$store.phantomBridge.running ? 'pb-dot-on' : 'pb-dot-off'"></span>
+                        <span style="font-size:0.8em;" x-text="$store.phantomBridge.running ? 'Bridge Open' : 'Offline'"></span>
+                    </div>
+                </div>
+
+                <!-- Open Bridge Button (when running) -->
+                <template x-if="$store.phantomBridge.running">
+                    <div>
+                        <button class="pb-open-btn" @click="$store.phantomBridge.openBridge()">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            Open Bridge in Browser
+                        </button>
+                        <button class="pb-stop-btn" @click="$store.phantomBridge.stopBridge()">
+                            Stop Bridge
+                        </button>
+                    </div>
+                </template>
+
+                <!-- Start Button (when not running) -->
+                <template x-if="!$store.phantomBridge.running">
+                    <button class="pb-start-btn" @click="$store.phantomBridge.startBridge()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                            <polygon points="5 3 19 12 5 21 5 3" fill="#22c55e"/>
+                        </svg>
+                        Start Bridge
+                    </button>
+                </template>
+
+                <!-- Auth Registry -->
+                <div class="pb-card" style="margin-top: 12px;">
+                    <div class="pb-section-title">
+                        Authenticated Domains
+                        <span class="pb-mono" style="opacity:0.4; font-weight:400;" x-text="'(' + $store.phantomBridge.authCount + ')'"></span>
+                    </div>
+                    <template x-if="$store.phantomBridge.authCount > 0">
+                        <div>
+                            <template x-for="entry in $store.phantomBridge.authEntries" :key="entry.domain">
+                                <div class="pb-auth-item">
+                                    <span class="pb-dot" :class="entry.authenticated ? 'pb-dot-on' : 'pb-dot-off'"></span>
+                                    <span class="pb-auth-domain" x-text="entry.domain"></span>
+                                    <span class="pb-auth-status" x-text="entry.expires"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                    <template x-if="$store.phantomBridge.authCount === 0">
+                        <p class="pb-empty">No authenticated sessions yet. Open the bridge and log in.</p>
+                    </template>
+                </div>
+
+                <!-- Learned Sitemaps -->
+                <div class="pb-card">
+                    <div class="pb-section-title">
+                        Learned Sitemaps
+                        <span class="pb-mono" style="opacity:0.4; font-weight:400;" x-text="'(' + $store.phantomBridge.sitemapCount + ' domains)'"></span>
+                    </div>
+                    <template x-if="$store.phantomBridge.sitemapCount === 0">
+                        <p class="pb-empty">Browse sites with the bridge open — URL patterns appear here.</p>
+                    </template>
+                    <template x-if="$store.phantomBridge.sitemapCount > 0">
+                        <div>
+                            <template x-for="sm in $store.phantomBridge.sitemapEntries" :key="sm.domain">
+                                <div class="pb-auth-item">
+                                    <span style="font-weight:600;" x-text="sm.domain"></span>
+                                    <span class="pb-mono" style="opacity:0.4;" x-text="sm.features + ' features'"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Playbooks -->
+                <div class="pb-card">
+                    <div class="pb-section-title">
+                        Saved Playbooks
+                        <span class="pb-mono" style="opacity:0.4; font-weight:400;" x-text="'(' + $store.phantomBridge.playbookCount + ')'"></span>
+                    </div>
+                    <template x-if="$store.phantomBridge.playbookCount === 0">
+                        <p class="pb-empty">Tell A0 "record this" while browsing to save replayable workflows.</p>
+                    </template>
+                    <template x-if="$store.phantomBridge.playbookCount > 0">
+                        <div>
+                            <template x-for="pb in $store.phantomBridge.playbooks" :key="pb.name">
+                                <div class="pb-auth-item">
+                                    <span style="font-weight:600;" x-text="pb.name"></span>
+                                    <span class="pb-mono" style="opacity:0.4;" x-text="pb.domain + ' · ' + pb.steps + ' steps'"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- How it works -->
+                <div class="pb-card" style="font-size:0.8em; opacity:0.6;">
+                    <p style="margin:0; line-height:1.4;">
+                        <strong>How it works:</strong>
+                        Click "Open Bridge" to control A0's browser from your machine.
+                        Log into any service — Toast, Google, X, OpenTable.
+                        The observer watches silently: learning auth patterns, mapping
+                        site structure, and recording workflows you can replay later.
+                        Close the bridge when done. A0 keeps everything.
+                    </p>
+                </div>
+
+            </div>
+        </template>
+    </div>
+</body>
+</html>

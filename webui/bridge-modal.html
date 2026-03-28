@@ -1,5 +1,5 @@
 <!--
-  Phantom Bridge — In-app draggable browser modal
+  Phantom Bridge -- In-app draggable browser modal
   Self-contained: CSS + HTML + vanilla JS (no framework dependencies)
   Injected via modal-shell-end extension point
 -->
@@ -8,21 +8,12 @@
   <!-- Title Bar (drag handle) -->
   <div id="pb-titlebar">
     <div id="pb-titlebar-left">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;">
-        <rect width="24" height="24" rx="6" fill="#6366f1"/>
-        <circle cx="12" cy="10" r="4" stroke="white" stroke-width="1.5" fill="none"/>
-        <path d="M8 18c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-      </svg>
+      <div id="pb-traffic-lights">
+        <span class="pb-dot pb-dot-close" title="Close"></span>
+        <span class="pb-dot pb-dot-minimize" title="Minimize"></span>
+        <span class="pb-dot pb-dot-green"></span>
+      </div>
       <span id="pb-title">Phantom Bridge</span>
-      <span id="pb-title-url"></span>
-    </div>
-    <div id="pb-titlebar-buttons">
-      <button id="pb-btn-minimize" title="Minimize">
-        <svg width="12" height="12" viewBox="0 0 12 12"><line x1="2" y1="6" x2="10" y2="6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-      </button>
-      <button id="pb-btn-close" title="Close">
-        <svg width="12" height="12" viewBox="0 0 12 12"><line x1="2" y1="2" x2="10" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="10" y1="2" x2="2" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-      </button>
     </div>
   </div>
 
@@ -35,107 +26,124 @@
     <div id="pb-urlbar-row">
       <button id="pb-nav-back" title="Back">&#8592;</button>
       <button id="pb-nav-refresh" title="Refresh">&#8635;</button>
-      <input id="pb-url-input" type="text" placeholder="Enter URL and press Enter" spellcheck="false" autocomplete="off">
-      <button id="pb-nav-go">Go</button>
+      <div id="pb-url-wrap">
+        <input id="pb-url-input" type="text" placeholder="Search or enter URL" spellcheck="false" autocomplete="off">
+        <span id="pb-url-arrow">&#8594;</span>
+      </div>
     </div>
 
     <!-- Screenshot area (focusable for keyboard capture) -->
     <div id="pb-viewport" tabindex="0">
-      <div id="pb-loading"><span>Connecting...</span></div>
+      <div id="pb-loading">
+        <div class="pb-spinner"></div>
+        <span>Connecting to bridge...</span>
+      </div>
       <img id="pb-screenshot" alt="Browser view" draggable="false" style="display:none;">
+      <div id="pb-kb-hint">Click to focus for keyboard input</div>
     </div>
   </div>
 
   <!-- Resize handle -->
-  <div id="pb-resize-handle"></div>
+  <div id="pb-resize-handle">
+    <svg width="12" height="12" viewBox="0 0 12 12">
+      <circle cx="9" cy="3" r="1" fill="rgba(255,255,255,0.25)"/>
+      <circle cx="5" cy="7" r="1" fill="rgba(255,255,255,0.25)"/>
+      <circle cx="9" cy="7" r="1" fill="rgba(255,255,255,0.25)"/>
+      <circle cx="9" cy="11" r="1" fill="rgba(255,255,255,0.25)"/>
+    </svg>
+  </div>
 </div>
 
 <style>
+  /* ── Modal shell ── */
   #pb-modal {
     position: fixed;
     z-index: 2500;
-    width: 800px;
-    height: 600px;
-    min-width: 400px;
-    min-height: 300px;
+    width: 900px;
+    height: 650px;
+    min-width: 450px;
+    min-height: 350px;
     bottom: 24px;
     right: 24px;
-    background: #111113;
-    border: 1px solid #2a2a2e;
+    background: #1c1c1e;
+    border: 1px solid rgba(255,255,255,0.08);
     border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3);
+    box-shadow: 0 25px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    font-family: system-ui, -apple-system, sans-serif;
-    color: #e0e0e0;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    color: rgba(255,255,255,0.87);
     user-select: none;
   }
 
-  /* Title bar */
+  /* ── Title bar ── */
   #pb-titlebar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 8px 12px;
-    background: rgba(26, 26, 30, 0.85);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid #2a2a2e;
+    justify-content: center;
+    height: 36px;
+    padding: 0 12px;
+    background: rgba(44,44,46,0.85);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
     cursor: grab;
     flex-shrink: 0;
+    position: relative;
   }
   #pb-titlebar:active { cursor: grabbing; }
 
   #pb-titlebar-left {
+    position: absolute;
+    left: 12px;
     display: flex;
     align-items: center;
-    gap: 8px;
-    overflow: hidden;
-    min-width: 0;
+    gap: 10px;
   }
+
   #pb-title {
-    font-size: 0.85em;
-    font-weight: 600;
-    white-space: nowrap;
-    color: #a5b4fc;
-  }
-  #pb-title-url {
-    font-size: 0.75em;
-    font-family: 'SF Mono', 'Fira Code', monospace;
-    opacity: 0.35;
+    font-size: 0.75rem;
+    font-weight: 500;
+    opacity: 0.6;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    min-width: 0;
+    max-width: 300px;
   }
 
-  #pb-titlebar-buttons {
+  /* Traffic light dots */
+  #pb-traffic-lights {
     display: flex;
     gap: 6px;
-    flex-shrink: 0;
-    margin-left: 12px;
+    align-items: center;
   }
-  #pb-titlebar-buttons button {
-    width: 24px; height: 24px;
-    display: flex; align-items: center; justify-content: center;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    color: #888;
+  .pb-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: opacity 0.15s;
+    position: relative;
   }
-  #pb-titlebar-buttons button:hover {
-    background: rgba(255,255,255,0.08);
-    color: #ccc;
-  }
-  #pb-btn-close:hover {
-    background: rgba(239, 68, 68, 0.2) !important;
-    color: #ef4444 !important;
-  }
+  .pb-dot-close { background: #ff5f57; }
+  .pb-dot-minimize { background: #febc2e; }
+  .pb-dot-green { background: #28c840; cursor: default; }
 
-  /* Body */
+  /* Show symbols on hover */
+  #pb-traffic-lights:hover .pb-dot::after {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    color: rgba(0,0,0,0.5);
+  }
+  #pb-traffic-lights:hover .pb-dot-close::after { content: "\00d7"; font-size: 11px; }
+  #pb-traffic-lights:hover .pb-dot-minimize::after { content: "\2013"; font-size: 10px; }
+
+  /* ── Body ── */
   #pb-body {
     display: flex;
     flex-direction: column;
@@ -147,185 +155,291 @@
   #pb-modal.pb-minimized #pb-resize-handle { display: none; }
   #pb-modal.pb-minimized { height: auto !important; min-height: 0 !important; }
 
-  /* Tab bar */
+  /* ── Tab bar ── */
   #pb-tabs {
     display: flex;
-    gap: 3px;
+    gap: 4px;
     padding: 6px 10px;
-    background: #131315;
-    border-bottom: 1px solid #222226;
+    background: rgba(28,28,30,0.95);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
     overflow-x: auto;
     flex-shrink: 0;
+    scrollbar-width: none;
   }
+  #pb-tabs::-webkit-scrollbar { display: none; }
   #pb-tabs:empty { display: none; }
+
   .pb-tab {
-    padding: 4px 12px;
-    background: #1a1a1e;
-    border: 1px solid #2a2a2e;
-    border-radius: 6px;
-    font-size: 0.75em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    height: 28px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid transparent;
+    border-radius: 14px;
+    font-size: 0.72rem;
     cursor: pointer;
     white-space: nowrap;
-    max-width: 160px;
+    max-width: 150px;
+    color: rgba(255,255,255,0.5);
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+  }
+  .pb-tab:hover {
+    background: rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.7);
+  }
+  .pb-tab.active {
+    background: rgba(99,102,241,0.15);
+    border-color: rgba(99,102,241,0.3);
+    color: #fff;
+  }
+  .pb-tab-label {
     overflow: hidden;
     text-overflow: ellipsis;
-    color: #aaa;
-    transition: all 0.15s;
+    min-width: 0;
   }
-  .pb-tab:hover { background: #222226; color: #ddd; }
-  .pb-tab.active {
-    background: rgba(99, 102, 241, 0.12);
-    border-color: #6366f1;
-    color: #a5b4fc;
+  .pb-tab-close {
+    font-size: 8px;
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    opacity: 0.3;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s;
+    background: transparent;
+    border: none;
+    color: inherit;
+    padding: 0;
+    line-height: 1;
+  }
+  .pb-tab-close:hover {
+    opacity: 1;
+    background: rgba(255,255,255,0.12);
   }
 
-  /* URL bar */
+  /* ── URL bar ── */
   #pb-urlbar-row {
     display: flex;
     align-items: center;
     gap: 6px;
     padding: 6px 10px;
-    background: #131315;
-    border-bottom: 1px solid #222226;
+    background: rgba(28,28,30,0.95);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
     flex-shrink: 0;
   }
-  #pb-url-input {
-    flex: 1;
-    padding: 6px 10px;
-    background: #1a1a1e;
-    border: 1px solid #2a2a2e;
-    border-radius: 6px;
-    color: #e0e0e0;
-    font-size: 0.8em;
-    font-family: 'SF Mono', 'Fira Code', monospace;
-    outline: none;
-  }
-  #pb-url-input:focus { border-color: #6366f1; }
   #pb-urlbar-row button {
-    padding: 5px 10px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
     border: none;
     border-radius: 6px;
     cursor: pointer;
-    font-size: 0.8em;
-    font-weight: 500;
+    font-size: 0.9rem;
+    color: rgba(255,255,255,0.4);
     transition: all 0.15s;
+    padding: 0;
+    flex-shrink: 0;
   }
-  #pb-nav-go {
-    background: #6366f1;
-    color: white;
-  }
-  #pb-nav-go:hover { background: #5558e6; }
-  #pb-nav-back, #pb-nav-refresh {
-    background: #222226;
-    color: #aaa;
-  }
-  #pb-nav-back:hover, #pb-nav-refresh:hover {
-    background: #2a2a2e;
-    color: #ddd;
+  #pb-urlbar-row button:hover {
+    color: rgba(255,255,255,0.8);
+    background: rgba(255,255,255,0.06);
   }
 
-  /* Viewport */
+  #pb-url-wrap {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  #pb-url-input {
+    width: 100%;
+    height: 32px;
+    padding: 0 28px 0 10px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    color: rgba(255,255,255,0.87);
+    font-size: 0.8rem;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    outline: none;
+    transition: box-shadow 0.2s, border-color 0.2s;
+  }
+  #pb-url-input:focus {
+    border-color: rgba(99,102,241,0.4);
+    box-shadow: 0 0 0 2px rgba(99,102,241,0.3);
+  }
+  #pb-url-input::placeholder {
+    color: rgba(255,255,255,0.2);
+  }
+  #pb-url-arrow {
+    position: absolute;
+    right: 8px;
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.2);
+    pointer-events: none;
+  }
+
+  /* ── Viewport ── */
   #pb-viewport {
     flex: 1;
     position: relative;
     overflow: hidden;
-    background: #0a0a0c;
-    cursor: pointer;
+    background: #0d0d0f;
+    cursor: default;
     outline: none;
     min-height: 0;
+    border-radius: 0 0 12px 12px;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);
   }
   #pb-viewport:focus {
-    box-shadow: inset 0 0 0 2px rgba(99, 102, 241, 0.3);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.3), 0 0 0 2px rgba(99,102,241,0.4);
   }
+  #pb-viewport:focus #pb-kb-hint { display: none; }
+
   #pb-screenshot {
     width: 100%;
     height: 100%;
     object-fit: contain;
     display: block;
   }
+
   #pb-loading {
     position: absolute;
     inset: 0;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    font-size: 0.85em;
-    opacity: 0.4;
+    gap: 14px;
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.3);
   }
 
-  /* Resize handle */
+  /* Spinner */
+  .pb-spinner {
+    width: 28px;
+    height: 28px;
+    border: 2px solid rgba(99,102,241,0.15);
+    border-top-color: rgba(99,102,241,0.6);
+    border-radius: 50%;
+    animation: pb-spin 0.8s linear infinite;
+  }
+  @keyframes pb-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Shimmer loading overlay */
+  .pb-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(99,102,241,0.04) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: pb-shimmer 1.5s ease-in-out infinite;
+    pointer-events: none;
+    border-radius: 0 0 12px 12px;
+  }
+  @keyframes pb-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* Keyboard hint */
+  #pb-kb-hint {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.7rem;
+    color: rgba(255,255,255,0.2);
+    background: rgba(0,0,0,0.4);
+    padding: 3px 10px;
+    border-radius: 10px;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+
+  /* ── Resize handle ── */
   #pb-resize-handle {
     position: absolute;
     bottom: 0;
     right: 0;
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     cursor: nwse-resize;
     z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.15;
+    transition: opacity 0.2s;
+    border-radius: 0 0 12px 0;
   }
-  #pb-resize-handle::after {
-    content: '';
-    position: absolute;
-    bottom: 4px;
-    right: 4px;
-    width: 8px;
-    height: 8px;
-    border-right: 2px solid #444;
-    border-bottom: 2px solid #444;
-    opacity: 0.5;
-  }
-  #pb-resize-handle:hover::after { opacity: 0.8; }
+  #pb-resize-handle:hover { opacity: 0.4; }
 </style>
 
 <script>
 (function() {
-  // ── State ──
-  let currentPageId = null;
-  let pages = [];
-  let screenshotTimer = null;
-  let pagesTimer = null;
-  let keyDebounceTimer = null;
-  let isMinimized = false;
-  let isDragging = false;
-  let isResizing = false;
+  // -- State --
+  var currentPageId = null;
+  var pages = [];
+  var screenshotTimer = null;
+  var pagesTimer = null;
+  var keyDebounceTimer = null;
+  var isMinimized = false;
+  var isDragging = false;
+  var isResizing = false;
+  var preMinimizeRect = null;
 
-  // ── DOM refs ──
-  const modal     = document.getElementById("pb-modal");
-  const titlebar  = document.getElementById("pb-titlebar");
-  const btnMin    = document.getElementById("pb-btn-minimize");
-  const btnClose  = document.getElementById("pb-btn-close");
-  const tabsBar   = document.getElementById("pb-tabs");
-  const urlInput  = document.getElementById("pb-url-input");
-  const btnGo     = document.getElementById("pb-nav-go");
-  const btnBack   = document.getElementById("pb-nav-back");
-  const btnRefresh = document.getElementById("pb-nav-refresh");
-  const viewport  = document.getElementById("pb-viewport");
-  const imgEl     = document.getElementById("pb-screenshot");
-  const loadingEl = document.getElementById("pb-loading");
-  const titleUrl  = document.getElementById("pb-title-url");
-  const resizeHandle = document.getElementById("pb-resize-handle");
+  // -- DOM refs --
+  var modal      = document.getElementById("pb-modal");
+  var titlebar   = document.getElementById("pb-titlebar");
+  var dotClose   = document.querySelector(".pb-dot-close");
+  var dotMin     = document.querySelector(".pb-dot-minimize");
+  var tabsBar    = document.getElementById("pb-tabs");
+  var urlInput   = document.getElementById("pb-url-input");
+  var btnBack    = document.getElementById("pb-nav-back");
+  var btnRefresh = document.getElementById("pb-nav-refresh");
+  var viewport   = document.getElementById("pb-viewport");
+  var imgEl      = document.getElementById("pb-screenshot");
+  var loadingEl  = document.getElementById("pb-loading");
+  var titleEl    = document.getElementById("pb-title");
+  var kbHint     = document.getElementById("pb-kb-hint");
+  var resizeHandle = document.getElementById("pb-resize-handle");
 
-  // ── API helper ──
-  let _callJsonApi = null;
+  // -- API helper --
+  var _callJsonApi = null;
   async function getApi() {
     if (!_callJsonApi) {
-      const mod = await import("/js/api.js");
+      var mod = await import("/js/api.js");
       _callJsonApi = mod.callJsonApi;
     }
     return _callJsonApi;
   }
   async function api(endpoint, body) {
-    const fn = await getApi();
+    var fn = await getApi();
     return fn("plugins/phantom_bridge/" + endpoint, body);
   }
 
-  // ── Show / Hide ──
+  // -- Show / Hide --
   function show() {
     modal.style.display = "flex";
     globalThis._phantomBridgeModalVisible = true;
+    if (isMinimized) {
+      isMinimized = false;
+      modal.classList.remove("pb-minimized");
+    }
     startPolling();
-    // Focus viewport for keyboard
-    setTimeout(() => viewport.focus(), 100);
+    setTimeout(function() { viewport.focus(); }, 100);
   }
 
   function hide() {
@@ -336,19 +450,57 @@
 
   function toggleMinimize() {
     isMinimized = !isMinimized;
+    if (isMinimized) {
+      // Save current position
+      var rect = modal.getBoundingClientRect();
+      preMinimizeRect = { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
+      // Snap to bottom-right
+      modal.style.bottom = "24px";
+      modal.style.right = "24px";
+      modal.style.top = "auto";
+      modal.style.left = "auto";
+      modal.style.width = "280px";
+      titleEl.textContent = "Phantom Bridge (" + pages.length + " tab" + (pages.length !== 1 ? "s" : "") + ")";
+    } else {
+      // Restore
+      if (preMinimizeRect) {
+        modal.style.top = preMinimizeRect.top + "px";
+        modal.style.left = preMinimizeRect.left + "px";
+        modal.style.bottom = "auto";
+        modal.style.right = "auto";
+        modal.style.width = preMinimizeRect.width + "px";
+        modal.style.height = preMinimizeRect.height + "px";
+      } else {
+        modal.style.bottom = "24px";
+        modal.style.right = "24px";
+        modal.style.top = "auto";
+        modal.style.left = "auto";
+        modal.style.width = "900px";
+        modal.style.height = "650px";
+      }
+      updateTitle();
+    }
     modal.classList.toggle("pb-minimized", isMinimized);
   }
 
-  // ── Global toggle (called by chat bar button) ──
+  function updateTitle() {
+    var active = pages.find(function(p) { return p.id === currentPageId; });
+    if (active && active.title) {
+      titleEl.textContent = active.title.length > 40 ? active.title.substring(0, 40) + "..." : active.title;
+    } else {
+      titleEl.textContent = "Phantom Bridge";
+    }
+  }
+
+  // -- Global toggle --
   globalThis._phantomBridgeModalToggle = async function() {
     if (modal.style.display === "none" || modal.style.display === "") {
-      // Check/start bridge
       try {
-        const status = await api("bridge", { action: "status" });
+        var status = await api("bridge", { action: "status" });
         if (!status.running) {
           if (globalThis.toast) globalThis.toast("Starting Phantom Bridge...", "info");
           await api("bridge", { action: "start" });
-          await new Promise(r => setTimeout(r, 2500));
+          await new Promise(function(r) { setTimeout(r, 2500); });
           if (globalThis.toast) globalThis.toast("Bridge is live!", "success");
         }
       } catch(e) {
@@ -361,10 +513,9 @@
     }
   };
 
-  // Expose visibility state for the chat bar button (boolean, not function)
   globalThis._phantomBridgeModalVisible = false;
 
-  // ── Polling ──
+  // -- Polling --
   function startPolling() {
     refreshPages();
     takeScreenshot();
@@ -379,37 +530,48 @@
     screenshotTimer = null;
   }
 
-  // ── Pages ──
+  // -- Pages --
   async function refreshPages() {
     try {
-      const data = await api("proxy", { action: "pages" });
+      var data = await api("proxy", { action: "pages" });
       if (!data.ok || !data.pages) return;
-      pages = data.pages.filter(p => p.type === "page");
+      pages = data.pages.filter(function(p) { return p.type === "page"; });
 
-      // Auto-select first page
       if (!currentPageId && pages.length > 0) {
         currentPageId = pages[0].id;
       }
 
       // Render tabs
-      tabsBar.innerHTML = pages.map(p => {
-        const label = p.title || p.url || "New Tab";
-        const cls = p.id === currentPageId ? "pb-tab active" : "pb-tab";
-        return '<div class="' + cls + '" data-page-id="' + p.id + '" title="' + (p.url || '') + '">' + escHtml(label) + '</div>';
+      tabsBar.innerHTML = pages.map(function(p) {
+        var label = p.title || p.url || "New Tab";
+        var cls = p.id === currentPageId ? "pb-tab active" : "pb-tab";
+        return '<div class="' + cls + '" data-page-id="' + p.id + '" title="' + escHtml(p.url || '') + '">'
+          + '<span class="pb-tab-label">' + escHtml(label) + '</span>'
+          + '<button class="pb-tab-close" data-close-id="' + p.id + '" title="Close tab">&times;</button>'
+          + '</div>';
       }).join("");
 
-      // Update URL display
-      const active = pages.find(p => p.id === currentPageId);
+      var active = pages.find(function(p) { return p.id === currentPageId; });
       if (active) {
         urlInput.value = active.url || "";
-        titleUrl.textContent = active.url || "";
       }
+
+      updateTitle();
     } catch(e) { /* bridge not ready */ }
   }
 
-  // Tab click delegation
+  // Tab click + close delegation
   tabsBar.addEventListener("click", function(e) {
-    const tab = e.target.closest(".pb-tab");
+    // Close button
+    var closeBtn = e.target.closest(".pb-tab-close");
+    if (closeBtn) {
+      e.stopPropagation();
+      var closeId = closeBtn.dataset.closeId;
+      closeTab(closeId);
+      return;
+    }
+    // Tab select
+    var tab = e.target.closest(".pb-tab");
     if (tab && tab.dataset.pageId) {
       currentPageId = tab.dataset.pageId;
       refreshPages();
@@ -417,22 +579,50 @@
     }
   });
 
-  // ── Screenshot ──
-  async function takeScreenshot() {
-    if (!currentPageId) return;
+  async function closeTab(tabId) {
+    // Try to close via CDP (action may not exist yet)
     try {
-      const data = await api("proxy", { action: "screenshot", page_id: currentPageId });
+      await api("proxy", { action: "close_tab", page_id: tabId });
+    } catch(e) { /* ignore */ }
+
+    // Remove from local list
+    pages = pages.filter(function(p) { return p.id !== tabId; });
+
+    // Switch to next tab if closing the active one
+    if (currentPageId === tabId) {
+      currentPageId = pages.length > 0 ? pages[0].id : null;
+    }
+
+    refreshPages();
+    if (currentPageId) takeScreenshot();
+  }
+
+  // -- Screenshot --
+  var screenshotLoading = false;
+  async function takeScreenshot() {
+    if (!currentPageId || screenshotLoading) return;
+    screenshotLoading = true;
+
+    // Add shimmer if image not yet loaded
+    if (imgEl.style.display === "none") {
+      viewport.classList.add("pb-shimmer");
+    }
+
+    try {
+      var data = await api("proxy", { action: "screenshot", page_id: currentPageId });
       if (data.ok && data.screenshot) {
         imgEl.src = "data:image/jpeg;base64," + data.screenshot;
         imgEl.style.display = "block";
         loadingEl.style.display = "none";
+        viewport.classList.remove("pb-shimmer");
       }
     } catch(e) { /* ignore */ }
+    screenshotLoading = false;
   }
 
-  // ── Navigate ──
+  // -- Navigate --
   async function navigate() {
-    let url = urlInput.value.trim();
+    var url = urlInput.value.trim();
     if (!url) return;
     if (!url.startsWith("http://") && !url.startsWith("https://")) {
       url = "https://" + url;
@@ -446,31 +636,27 @@
     setTimeout(refreshPages, 1500);
   }
 
-  btnGo.addEventListener("click", navigate);
   urlInput.addEventListener("keydown", function(e) {
     if (e.key === "Enter") { navigate(); e.preventDefault(); }
-    e.stopPropagation(); // Don't send URL bar keys to the bridge
+    e.stopPropagation();
   });
 
   btnBack.addEventListener("click", function() { takeScreenshot(); refreshPages(); });
   btnRefresh.addEventListener("click", function() { takeScreenshot(); refreshPages(); });
-  btnMin.addEventListener("click", toggleMinimize);
-  btnClose.addEventListener("click", hide);
+  dotMin.addEventListener("click", function(e) { e.stopPropagation(); toggleMinimize(); });
+  dotClose.addEventListener("click", function(e) { e.stopPropagation(); hide(); });
 
-  // ── Click to interact ──
+  // -- Click to interact --
   imgEl.addEventListener("click", async function(e) {
     if (!currentPageId) return;
     if (!imgEl.naturalWidth) return;
 
-    const rect = imgEl.getBoundingClientRect();
-    const scaleX = 1280 / rect.width;
-    const scaleY = 900 / rect.height;
-    const x = Math.round((e.clientX - rect.left) * scaleX);
-    const y = Math.round((e.clientY - rect.top) * scaleY);
+    var rect = imgEl.getBoundingClientRect();
+    var x = Math.round((e.clientX - rect.left) * (1280 / rect.width));
+    var y = Math.round((e.clientY - rect.top) * (900 / rect.height));
 
     try {
       await api("click", { page_id: currentPageId, x: x, y: y });
-      // Focus viewport for keyboard after click
       viewport.focus();
       setTimeout(takeScreenshot, 500);
       setTimeout(refreshPages, 1000);
@@ -479,9 +665,13 @@
     }
   });
 
-  // ── Keyboard input ──
+  // Click viewport to focus
+  viewport.addEventListener("click", function() {
+    viewport.focus();
+  });
+
+  // -- Keyboard input --
   viewport.addEventListener("keydown", function(e) {
-    // Don't capture if URL input is focused
     if (document.activeElement === urlInput) return;
 
     e.preventDefault();
@@ -493,17 +683,12 @@
     if (document.activeElement === urlInput) return;
     e.preventDefault();
     e.stopPropagation();
-    // keyUp is already sent as part of "full" dispatch
   });
 
   async function sendKey(e) {
     if (!currentPageId) return;
 
-    const modifiers = {};
-    if (e.shiftKey) modifiers.shift = true;
-    if (e.ctrlKey) modifiers.ctrl = true;
-    if (e.altKey) modifiers.alt = true;
-    if (e.metaKey) modifiers.meta = true;
+    var modifiers = (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
 
     try {
       await api("keyboard", {
@@ -511,52 +696,45 @@
         key: e.key,
         code: e.code,
         text: e.key.length === 1 ? e.key : "",
-        modifiers: modifiers,
-        type: "full"
+        modifiers: modifiers
       });
     } catch(err) {
       console.error("Bridge keyboard failed:", err);
     }
 
-    // Debounced screenshot refresh after typing
     clearTimeout(keyDebounceTimer);
     keyDebounceTimer = setTimeout(takeScreenshot, 300);
   }
 
-  // ── Drag ──
-  let dragOffsetX = 0, dragOffsetY = 0;
+  // -- Drag --
+  var dragOffsetX = 0, dragOffsetY = 0;
 
   titlebar.addEventListener("mousedown", function(e) {
-    // Don't drag if clicking buttons
-    if (e.target.closest("#pb-titlebar-buttons")) return;
-
+    if (e.target.closest("#pb-traffic-lights")) return;
     isDragging = true;
-    const rect = modal.getBoundingClientRect();
+    var rect = modal.getBoundingClientRect();
     dragOffsetX = e.clientX - rect.left;
     dragOffsetY = e.clientY - rect.top;
 
-    // Switch from bottom/right positioning to top/left for drag
     modal.style.top = rect.top + "px";
     modal.style.left = rect.left + "px";
     modal.style.bottom = "auto";
     modal.style.right = "auto";
-
     e.preventDefault();
   });
 
   document.addEventListener("mousemove", function(e) {
     if (isDragging) {
-      const x = Math.max(0, Math.min(e.clientX - dragOffsetX, window.innerWidth - 100));
-      const y = Math.max(0, Math.min(e.clientY - dragOffsetY, window.innerHeight - 40));
+      var x = Math.max(0, Math.min(e.clientX - dragOffsetX, window.innerWidth - 100));
+      var y = Math.max(0, Math.min(e.clientY - dragOffsetY, window.innerHeight - 40));
       modal.style.left = x + "px";
       modal.style.top = y + "px";
       e.preventDefault();
     }
-
     if (isResizing) {
-      const rect = modal.getBoundingClientRect();
-      const newW = Math.max(400, e.clientX - rect.left);
-      const newH = Math.max(300, e.clientY - rect.top);
+      var rect = modal.getBoundingClientRect();
+      var newW = Math.max(450, e.clientX - rect.left);
+      var newH = Math.max(350, e.clientY - rect.top);
       modal.style.width = newW + "px";
       modal.style.height = newH + "px";
       e.preventDefault();
@@ -568,11 +746,10 @@
     isResizing = false;
   });
 
-  // ── Resize ──
+  // -- Resize --
   resizeHandle.addEventListener("mousedown", function(e) {
     isResizing = true;
-    // Ensure positioned with top/left for resize to work properly
-    const rect = modal.getBoundingClientRect();
+    var rect = modal.getBoundingClientRect();
     modal.style.top = rect.top + "px";
     modal.style.left = rect.left + "px";
     modal.style.bottom = "auto";
@@ -581,9 +758,9 @@
     e.stopPropagation();
   });
 
-  // ── Utility ──
+  // -- Utility --
   function escHtml(s) {
-    const d = document.createElement("div");
+    var d = document.createElement("div");
     d.textContent = s;
     return d.innerHTML;
   }

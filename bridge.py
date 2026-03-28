@@ -59,6 +59,7 @@ class BrowserBridge:
 
         self._process: subprocess.Popen | None = None  # type: ignore[type-arg]
         self._started_at: float | None = None
+        self._observer_manager = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -124,6 +125,21 @@ class BrowserBridge:
         # Wait for the debug port to be ready
         await self._wait_for_devtools()
 
+        # Start observer layers (auth registry, sitemap learner, playbook recorder)
+        try:
+            from observer.manager import ObserverManager
+
+            data_dir = self.profile_dir.parent  # data/ directory (sibling to profile/)
+            self._observer_manager = ObserverManager(
+                port=self.remote_debug_port,
+                data_dir=data_dir,
+            )
+            await self._observer_manager.start()
+            logger.info("browser_bridge: observer layers started")
+        except Exception as e:
+            logger.warning("browser_bridge: observer layers failed to start: %s", e)
+            self._observer_manager = None
+
         return self.status()
 
     async def stop(self) -> dict[str, Any]:
@@ -132,6 +148,15 @@ class BrowserBridge:
 
         if not self.is_running():
             return {"running": False, "message": "Bridge was not running."}
+
+        # Stop observer layers first
+        if self._observer_manager:
+            try:
+                await self._observer_manager.stop()
+                logger.info("browser_bridge: observer layers stopped")
+            except Exception as e:
+                logger.warning("browser_bridge: error stopping observers: %s", e)
+            self._observer_manager = None
 
         pid = self._process.pid if self._process else None
         try:

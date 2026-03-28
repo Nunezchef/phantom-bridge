@@ -8,12 +8,13 @@
   <!-- Title Bar (drag handle) -->
   <div id="pb-titlebar">
     <div id="pb-titlebar-left">
-      <div id="pb-traffic-lights">
-        <span class="pb-dot pb-dot-close" title="Close"></span>
-        <span class="pb-dot pb-dot-minimize" title="Minimize"></span>
-        <span class="pb-dot pb-dot-green"></span>
-      </div>
       <span id="pb-title">Phantom Bridge</span>
+    </div>
+    <div id="pb-titlebar-right">
+      <button class="pb-titlebar-btn" id="pb-btn-minimize" title="Minimize to icon">
+        <svg width="12" height="12" viewBox="0 0 12 12"><line x1="2" y1="6" x2="10" y2="6" stroke="currentColor" stroke-width="1.5"/></svg>
+      </button>
+      <button class="pb-titlebar-btn pb-btn-close" id="pb-btn-close" title="Close">&times;</button>
     </div>
   </div>
 
@@ -65,47 +66,41 @@
     min-height: 350px;
     bottom: 24px;
     right: 24px;
-    background: #1c1c1e;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 12px;
-    box-shadow: 0 25px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+    background: var(--color-background, #1c1c1e);
+    border: 1px solid var(--color-border, rgba(255,255,255,0.1));
+    border-radius: 8px;
+    box-shadow: 0 4px 23px rgba(0,0,0,0.3);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-    color: rgba(255,255,255,0.87);
+    font-family: "Rubik", Arial, Helvetica, sans-serif;
+    color: var(--color-text, rgba(255,255,255,0.87));
     user-select: none;
   }
 
-  /* ── Title bar ── */
+  /* ── Title bar — matches A0 modal-header ── */
   #pb-titlebar {
     display: flex;
     align-items: center;
-    justify-content: center;
-    height: 36px;
-    padding: 0 12px;
-    background: rgba(44,44,46,0.85);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    justify-content: space-between;
+    padding: 0.5rem 1rem;
+    background: var(--color-background, #1c1c1e);
+    border-bottom: 1px solid var(--color-border, rgba(255,255,255,0.1));
     cursor: grab;
     flex-shrink: 0;
-    position: relative;
   }
   #pb-titlebar:active { cursor: grabbing; }
 
   #pb-titlebar-left {
-    position: absolute;
-    left: 12px;
     display: flex;
     align-items: center;
     gap: 10px;
   }
 
   #pb-title {
-    font-size: 0.75rem;
-    font-weight: 500;
-    opacity: 0.6;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-primary, #6366f1);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -113,6 +108,32 @@
   }
 
   /* Traffic light dots */
+  /* Titlebar buttons */
+  #pb-titlebar-right {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .pb-titlebar-btn {
+    background: none;
+    border: none;
+    color: var(--color-text, rgba(255,255,255,0.6));
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-size: 14px;
+    line-height: 1;
+    opacity: 0.5;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .pb-titlebar-btn:hover { opacity: 1; background: rgba(255,255,255,0.1); }
+  .pb-btn-close { font-size: 18px; }
+  .pb-btn-close:hover { color: var(--color-accent, #e74c3c); }
+
+  /* DEPRECATED — kept for backward compat */
   #pb-traffic-lights {
     display: flex;
     gap: 6px;
@@ -403,8 +424,8 @@
   // -- DOM refs --
   var modal      = document.getElementById("pb-modal");
   var titlebar   = document.getElementById("pb-titlebar");
-  var dotClose   = document.querySelector(".pb-dot-close");
-  var dotMin     = document.querySelector(".pb-dot-minimize");
+  var dotClose   = document.getElementById("pb-btn-close");
+  var dotMin     = document.getElementById("pb-btn-minimize");
   var tabsBar    = document.getElementById("pb-tabs");
   var urlInput   = document.getElementById("pb-url-input");
   var btnBack    = document.getElementById("pb-nav-back");
@@ -432,12 +453,17 @@
 
   // -- Show / Hide --
   function show() {
+    // Restore previous position if we have one (from minimize)
+    if (preMinimizeRect) {
+      modal.style.top = preMinimizeRect.top + "px";
+      modal.style.left = preMinimizeRect.left + "px";
+      modal.style.bottom = "auto";
+      modal.style.right = "auto";
+      modal.style.width = preMinimizeRect.width + "px";
+      modal.style.height = preMinimizeRect.height + "px";
+    }
     modal.style.display = "flex";
     globalThis._phantomBridgeModalVisible = true;
-    if (isMinimized) {
-      isMinimized = false;
-      modal.classList.remove("pb-minimized");
-    }
     startPolling();
     setTimeout(function() { viewport.focus(); }, 100);
   }
@@ -449,38 +475,17 @@
   }
 
   function toggleMinimize() {
-    isMinimized = !isMinimized;
-    if (isMinimized) {
-      // Save current position
+    // Minimize = hide modal completely, ghost icon goes to "eyes closed" state
+    // Save position so we can restore on next toggle
+    if (modal.style.display !== "none") {
       var rect = modal.getBoundingClientRect();
       preMinimizeRect = { top: rect.top, left: rect.left, width: rect.width, height: rect.height };
-      // Snap to bottom-right
-      modal.style.bottom = "24px";
-      modal.style.right = "24px";
-      modal.style.top = "auto";
-      modal.style.left = "auto";
-      modal.style.width = "280px";
-      titleEl.textContent = "Phantom Bridge (" + pages.length + " tab" + (pages.length !== 1 ? "s" : "") + ")";
-    } else {
-      // Restore
-      if (preMinimizeRect) {
-        modal.style.top = preMinimizeRect.top + "px";
-        modal.style.left = preMinimizeRect.left + "px";
-        modal.style.bottom = "auto";
-        modal.style.right = "auto";
-        modal.style.width = preMinimizeRect.width + "px";
-        modal.style.height = preMinimizeRect.height + "px";
-      } else {
-        modal.style.bottom = "24px";
-        modal.style.right = "24px";
-        modal.style.top = "auto";
-        modal.style.left = "auto";
-        modal.style.width = "900px";
-        modal.style.height = "650px";
-      }
-      updateTitle();
     }
-    modal.classList.toggle("pb-minimized", isMinimized);
+    // Hide the modal — the chat bar icon's eye animation handles the visual feedback
+    modal.style.display = "none";
+    globalThis._phantomBridgeModalVisible = false;
+    // Keep polling running so bridge stays alive and icon stays purple
+    // The breathing animation on the icon tells the user the bridge is still running
   }
 
   function updateTitle() {
@@ -710,7 +715,7 @@
   var dragOffsetX = 0, dragOffsetY = 0;
 
   titlebar.addEventListener("mousedown", function(e) {
-    if (e.target.closest("#pb-traffic-lights")) return;
+    if (e.target.closest("#pb-titlebar-right")) return;
     isDragging = true;
     var rect = modal.getBoundingClientRect();
     dragOffsetX = e.clientX - rect.left;

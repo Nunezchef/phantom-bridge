@@ -38,6 +38,9 @@ class ProxyHandler(ApiHandler):
             page_id = input.get("page_id", "")
             url = input.get("url", "")
             return await self._navigate(page_id, url)
+        elif action == "close_tab":
+            page_id = input.get("page_id", "")
+            return await self._close_tab(page_id)
         else:
             return {"ok": False, "error": f"Unknown action: {action}"}
 
@@ -128,5 +131,17 @@ class ProxyHandler(ApiHandler):
                 result = json.loads(await ws.recv())
                 return {"ok": True, "result": result.get("result", {})}
 
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    async def _close_tab(self, page_id: str) -> dict:
+        """Close a browser tab via CDP."""
+        if not page_id:
+            return {"ok": False, "error": "page_id required"}
+
+        try:
+            url = f"{CDP_BASE}/json/close/{page_id}"
+            with urllib.request.urlopen(url, timeout=3) as resp:
+                return {"ok": True, "closed": page_id}
         except Exception as e:
             return {"ok": False, "error": str(e)}

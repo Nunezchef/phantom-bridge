@@ -111,7 +111,6 @@ class BrowserBridge:
                 args,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                preexec_fn=os.setsid if hasattr(os, "setsid") else None,
             )
         except FileNotFoundError:
             raise RuntimeError(
@@ -161,11 +160,7 @@ class BrowserBridge:
         pid = self._process.pid if self._process else None
         try:
             if self._process:
-                # Kill the entire process group
-                if hasattr(os, "killpg"):
-                    os.killpg(os.getpgid(self._process.pid), signal.SIGTERM)
-                else:
-                    self._process.terminate()
+                self._process.terminate()
                 self._process.wait(timeout=5)
         except Exception as e:
             logger.warning("browser_bridge: error stopping process: %s", e)
@@ -377,9 +372,23 @@ class BrowserBridge:
 
 def create_bridge_from_config(config: dict[str, Any] | None = None) -> BrowserBridge:
     """Create a BrowserBridge instance from A0 plugin config dict."""
+    plugin_dir = Path(__file__).resolve().parent
+
+    # Load defaults from YAML if no config provided
+    if not config:
+        try:
+            import yaml
+            yaml_path = plugin_dir / "default_config.yaml"
+            if yaml_path.exists():
+                with open(yaml_path) as f:
+                    config = yaml.safe_load(f) or {}
+        except ImportError:
+            config = {}
+        except Exception:
+            config = {}
+
     config = config or {}
 
-    plugin_dir = Path(__file__).resolve().parent
     profile_dir = plugin_dir / config.get("profile_dir", "data/profile")
 
     return BrowserBridge(

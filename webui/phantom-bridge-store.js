@@ -121,10 +121,8 @@ export const store = createStore("phantomBridge", {
     },
 
     openBridge() {
-        // Open CDP inspect page in new tab
-        // Uses the host's port mapping — user needs 9222 exposed
-        // or we proxy through A0's port
-        const url = this.connectUrl || "http://localhost:9222";
-        window.open(url, "_blank");
+        // Open the bridge landing page — proxies CDP through A0's port
+        // No extra ports needed
+        window.open("/usr/plugins/phantom_bridge/webui/bridge.html", "_blank");
     },
 });

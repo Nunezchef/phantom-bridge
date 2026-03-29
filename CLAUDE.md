@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Phantom Bridge is an **Agent Zero (A0) plugin** that exposes the container's Chromium browser to the host machine via Chrome DevTools Protocol (CDP). Users connect from their host browser, log into services, and A0's browser agent inherits those authenticated sessions. Observer layers passively learn auth patterns, site maps, and replayable workflows.
+Phantom Bridge is an **Agent Zero (A0) plugin** that opens a remote browser viewer (noVNC) so users can authenticate to any web service from their own browser. A0 inherits those sessions, learns site patterns, and can replay recorded workflows autonomously. The display layer uses noVNC (Xvfb + x11vnc + websockify), while the observation layer uses CDP (Chrome DevTools Protocol) for auth detection, sitemap learning, and playbook recording.
 
 ## Tech Stack
 - Language: Python 3.10+
@@ -15,6 +15,7 @@ Phantom Bridge is an **Agent Zero (A0) plugin** that exposes the container's Chr
 - Linter: none
 - Frontend: Alpine.js (via A0's built-in Alpine)
 - Runtime dependency: `websockets>=12.0,<14.0`
+- System dependency: `x11vnc`, `novnc` (apt packages — installed via execute.py)
 - Optional dependency: `pyyaml` (config loading)
 
 ## Directory Structure
@@ -39,17 +40,17 @@ tools/                 # A0 tool implementations (one tool per file)
   bridge_replay.py     #   Replay saved playbooks
   bridge_health.py     #   Check session health
 api/                   # HTTP API handlers for webui
-  bridge.py            #   Start/stop/status/pages/auth/sitemaps/playbooks
-  click.py             #   CDP mouse event proxy
-  keyboard.py          #   CDP keyboard event proxy
-  proxy.py             #   CDP WebSocket proxy
+  bridge.py            #   Start/stop/status/auth/sitemaps/playbooks
+  proxy.py             #   CDP page list proxy
 extensions/            # A0 extension hooks
   system_prompt/       #   _45_ prefix = load order 45
   python/message_loop_start/  # _30_ prefix = load order 30
 webui/                 # Alpine.js sidebar panel for A0's UI
   main.html            #   Plugin panel (modal content)
-  phantom-bridge-store.js  # Alpine store — polls API every 10s
-  bridge.html          #   Bridge viewer for inspectable pages
+  phantom-bridge-store.js  # Alpine store — polls API every 5s
+  bridge.html          #   noVNC iframe embed (remote browser viewer)
+execute.py             # Dependency installer (x11vnc + novnc)
+hooks.py               # A0 framework lifecycle hooks (install)
 data/                  # Persistent state (gitignored, created at runtime)
 ```
 
@@ -71,6 +72,8 @@ data/                  # Persistent state (gitignored, created at runtime)
 ## Key Patterns
 
 - **Singleton bridge**: `_bridge` module-level variable in `bridge.py`; only one Chromium process per container
+- **noVNC display layer**: bridge.py manages three processes — Chromium + x11vnc + websockify. noVNC serves on port 6080 (configurable). Display and observation are separate concerns.
+- **A0 plugin imports**: use `from usr.plugins.phantom_bridge.module import X` — no sys.path hacks
 - **Config cascade**: `default_config.yaml` -> A0 plugin settings UI -> tool call params
 - **Profile sharing**: The critical integration — `_30_browser_bridge_profile.py` monkeypatches `browser_agent.State.get_user_data_dir()` to return the bridge's persistent profile at `data/profile/`. Also patches `__del__` to prevent profile deletion.
 - **Observer data files**: `data/auth_registry.json`, `data/sitemaps/*.json`, `data/playbooks/*.json`

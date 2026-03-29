@@ -1,10 +1,11 @@
 name: phantom_bridge
 title: Phantom Bridge
 description: >
-  Browser bridge with intelligent observer layers. Exposes A0's Chromium
-  via CDP, watches user navigation to learn auth patterns, site maps, and
-  replayable workflows. Log into any service once — A0 uses it forever.
-version: 0.2.0
+  Log into any service once — A0 uses it forever. Opens a remote browser
+  viewer (noVNC) so you can authenticate from your own browser. A0 inherits
+  those sessions, learns site patterns, and can replay recorded workflows
+  autonomously.
+version: 1.0.0
 settings_sections:
   - external
 per_project_config: false

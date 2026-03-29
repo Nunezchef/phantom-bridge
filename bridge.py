@@ -99,6 +99,7 @@ class BrowserBridge:
             f"--remote-debugging-address={self.bind_address}",
             f"--user-data-dir={self.profile_dir}",
             f"--window-size={self.window_width},{self.window_height}",
+            "--start-maximized",
             "--no-first-run",
             "--no-default-browser-check",
             "--disable-background-networking",

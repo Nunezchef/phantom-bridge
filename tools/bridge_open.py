@@ -90,7 +90,7 @@ class BrowserBridgeOpen(Tool):
         """Load plugin configuration."""
         try:
             from helpers.plugins import get_plugin_config
-            return get_plugin_config("browser_bridge", agent=self.agent) or {}
+            return get_plugin_config("phantom_bridge", agent=self.agent) or {}
         except ImportError:
             pass
 

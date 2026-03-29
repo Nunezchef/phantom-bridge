@@ -120,12 +120,6 @@ class BridgeHandler(ApiHandler):
 
     async def _export_cookies(self) -> dict:
         """Fetch all cookies from Chrome via CDP and save to data/cookies.json."""
-        from usr.plugins.phantom_bridge.bridge import get_bridge
-
-        bridge = get_bridge()
-        if not bridge or not bridge.is_running():
-            return {"ok": False, "error": "Bridge not running"}
-
         try:
             import asyncio
             import websockets
@@ -172,12 +166,6 @@ class BridgeHandler(ApiHandler):
 
     async def _delete_cookies(self, domain: str) -> dict:
         """Delete cookies — all if domain is empty, or for a specific domain."""
-        from usr.plugins.phantom_bridge.bridge import get_bridge
-
-        bridge = get_bridge()
-        if not bridge or not bridge.is_running():
-            return {"ok": False, "error": "Bridge not running"}
-
         try:
             import asyncio
             import websockets

@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="docs/projecticon.png" alt="Phantom Bridge" width="180" />
+  <img src="docs/banner.png" alt="Phantom Bridge" width="700" />
 </p>
-
-<h1 align="center">Phantom Bridge</h1>
 
 <p align="center">
   <strong>Log into any service once. A0 uses it forever.</strong>

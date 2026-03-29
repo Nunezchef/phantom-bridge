@@ -167,13 +167,22 @@
                 <div class="pb-card" style="font-size:0.8em; opacity:0.6;">
                     <p style="margin:0; line-height:1.4;">
                         <strong>How it works:</strong>
-                        Click "Open Bridge" to control A0's browser from your machine.
-                        Log into any service — Toast, Google, X, OpenTable.
-                        The observer watches silently: learning auth patterns, mapping
-                        site structure, and recording workflows you can replay later.
-                        Close the bridge when done. A0 keeps everything.
+                        Click "Open Bridge" to control A0's Chromium from your machine.
+                        Log into any service — Google, X, NotebookLM, OpenTable.
+                        A0 inherits those sessions and can use them with browser_agent.
+                        Tell A0 to "record this" while browsing to teach it workflows
+                        it can replay autonomously later.
                     </p>
                 </div>
+
+                <!-- noVNC connection info -->
+                <template x-if="$store.phantomBridge.running">
+                    <div class="pb-card" style="font-size:0.8em; opacity:0.5;">
+                        <p style="margin:0;">
+                            <span class="pb-mono" x-text="'noVNC: ' + (location.hostname || 'localhost') + ':' + $store.phantomBridge.novncPort"></span>
+                        </p>
+                    </div>
+                </template>
 
             </div>
         </template>

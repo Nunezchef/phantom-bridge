@@ -91,10 +91,8 @@ export const store = createStore("phantomBridge", {
     },
 
     openBridge() {
-        if (this.novncReady && this.novncUrl) {
-            window.open(`/plugins/phantom_bridge/webui/bridge.html`, "_blank");
-        } else {
-            window.open(this.novncUrl || "http://localhost:6080/vnc.html?autoconnect=true&resize=scale", "_blank");
-        }
+        const host = location.hostname || "localhost";
+        const url = `http://${host}:${this.novncPort}/vnc.html?autoconnect=true&resize=scale&reconnect=true`;
+        window.open(url, "phantom-bridge");
     },
 });

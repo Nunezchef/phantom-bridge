@@ -43,6 +43,11 @@ class ObserverManager:
     async def start(self) -> None:
         """Connect CDP, enable domains, start all observers."""
         await self._cdp.connect()
+
+        # Start CDP listener FIRST — it reads responses from the WebSocket.
+        # Without it, send() calls hang because nobody reads the response.
+        self._tasks.append(asyncio.create_task(self._cdp._listen()))
+
         await self._cdp.enable_domains("Page", "Network", "Runtime")
 
         # Level 1: Auth Registry (always available)
@@ -67,9 +72,6 @@ class ObserverManager:
             logger.info("observer_manager: PlaybookRecorder started")
         except ImportError:
             logger.debug("observer_manager: PlaybookRecorder not available (Stream C)")
-
-        # Start CDP listener as background task
-        self._tasks.append(asyncio.create_task(self._cdp._listen()))
         logger.info("observer_manager: all observers started")
 
     async def stop(self) -> None:

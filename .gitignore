@@ -1,1 +1,15 @@
+# Runtime data (cookies, sessions, profiles — sensitive!)
+data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
 .DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

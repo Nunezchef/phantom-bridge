@@ -356,21 +356,21 @@ class BrowserBridge:
 
     def _ensure_display(self) -> None:
         """Start Xvfb if no DISPLAY is set or if the display isn't active."""
-        if self._display and self._xvfb_process is None:
-            # DISPLAY is set — check if it's actually running
-            display_num = self._display.replace(":", "")
-            lock_file = Path(f"/tmp/.X{display_num}-lock")
-            if lock_file.exists():
-                logger.info("browser_bridge: using existing display %s", self._display)
-                return
+        display = ":99"
 
-        # Start our own Xvfb
+        # Check if Xvfb is already running on :99
+        lock_file = Path("/tmp/.X99-lock")
+        if lock_file.exists():
+            self._display = display
+            os.environ["DISPLAY"] = display
+            logger.info("browser_bridge: using existing Xvfb on %s", display)
+            return
+
         xvfb_bin = shutil.which("Xvfb")
         if not xvfb_bin:
             logger.warning("browser_bridge: Xvfb not found — display may not work")
             return
 
-        display = ":99"
         try:
             self._xvfb_process = subprocess.Popen(
                 [
@@ -384,8 +384,6 @@ class BrowserBridge:
             self._display = display
             os.environ["DISPLAY"] = display
             logger.info("browser_bridge: Xvfb started on display %s", display)
-            # Give Xvfb a moment to start
-            import time
             time.sleep(0.5)
         except Exception as e:
             logger.warning("browser_bridge: failed to start Xvfb: %s", e)
@@ -394,10 +392,28 @@ class BrowserBridge:
     # noVNC (x11vnc + websockify)
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _is_port_in_use(port: int) -> bool:
+        """Check if a TCP port is already in use."""
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            return s.connect_ex(("127.0.0.1", port)) == 0
+
     def _start_novnc(self) -> None:
         """Launch x11vnc and websockify for noVNC browser control."""
         display = self._display or os.environ.get("DISPLAY", ":99")
         vnc_port = 5900
+
+        # Skip if VNC is already running on port 5900
+        if self._is_port_in_use(vnc_port):
+            logger.info("browser_bridge: x11vnc already running on port %d", vnc_port)
+            # Check if websockify is also running
+            if self._is_port_in_use(self.novnc_port):
+                logger.info("browser_bridge: websockify already running on port %d", self.novnc_port)
+                return
+            # Only need websockify
+            self._start_websockify(vnc_port)
+            return
 
         # Start x11vnc — captures the Xvfb display
         x11vnc_bin = shutil.which("x11vnc")
@@ -427,7 +443,14 @@ class BrowserBridge:
             logger.warning("browser_bridge: failed to start x11vnc: %s", e)
             return
 
-        # Start websockify — bridges VNC over WebSocket + serves noVNC HTML
+        self._start_websockify(vnc_port)
+
+    def _start_websockify(self, vnc_port: int) -> None:
+        """Start websockify to bridge VNC over WebSocket."""
+        if self._is_port_in_use(self.novnc_port):
+            logger.info("browser_bridge: websockify already running on port %d", self.novnc_port)
+            return
+
         websockify_bin = shutil.which("websockify")
         novnc_web = self._find_novnc_web_dir()
 
@@ -435,23 +458,13 @@ class BrowserBridge:
             logger.warning("browser_bridge: websockify not found — noVNC disabled")
             return
 
-        ws_args = [
-            websockify_bin,
-            "--web", novnc_web,
-            f"0.0.0.0:{self.novnc_port}",
-            f"localhost:{vnc_port}",
-        ]
-
         try:
             self._websockify_process = subprocess.Popen(
-                ws_args,
+                [websockify_bin, "--web", novnc_web, f"0.0.0.0:{self.novnc_port}", f"localhost:{vnc_port}"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            logger.info(
-                "browser_bridge: noVNC ready at http://localhost:%d/vnc.html",
-                self.novnc_port,
-            )
+            logger.info("browser_bridge: noVNC ready at http://localhost:%d/vnc.html", self.novnc_port)
         except Exception as e:
             logger.warning("browser_bridge: failed to start websockify: %s", e)
 

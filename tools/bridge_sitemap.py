@@ -18,7 +18,7 @@ logger = logging.getLogger("phantom_bridge")
 class BrowserBridgeSitemap(Tool):
 
     async def execute(self, **kwargs: Any) -> Response:
-        from plugins.browser_bridge.bridge import get_bridge
+        from usr.plugins.phantom_bridge.bridge import get_bridge
 
         bridge = get_bridge()
 

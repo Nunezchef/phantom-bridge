@@ -19,7 +19,7 @@ logger = logging.getLogger("browser_bridge")
 class BrowserBridgeOpen(Tool):
 
     async def execute(self, **kwargs: Any) -> Response:
-        from plugins.browser_bridge.bridge import (
+        from usr.plugins.phantom_bridge.bridge import (
             get_bridge,
             create_bridge_from_config,
         )
@@ -53,19 +53,32 @@ class BrowserBridgeOpen(Tool):
                 break_loop=False,
             )
 
-        port = status.get("port", 9222)
-        connect_url = status.get("connect_url", f"http://localhost:{port}")
+        novnc_url = status.get("novnc_url", "")
+        novnc_running = status.get("novnc_running", False)
+
+        if novnc_running:
+            viewer_msg = (
+                f"Remote browser viewer: {novnc_url}\n"
+                f"Or use the Phantom Bridge panel in A0's sidebar.\n\n"
+                f"The user can control the container's browser directly — "
+                f"full keyboard, mouse, and clipboard support.\n"
+            )
+        else:
+            viewer_msg = (
+                f"noVNC is not running (dependencies may not be installed).\n"
+                f"The user can still connect via Chrome DevTools at "
+                f"http://localhost:{status.get('port', 9222)}\n"
+            )
 
         return Response(
             message=(
                 f"Browser bridge is live!\n\n"
-                f"Connect URL: {connect_url}\n"
-                f"Profile: {status.get('profile_dir', 'unknown')}\n\n"
+                f"{viewer_msg}\n"
                 f"Instructions for the user:\n"
-                f"1. Open {connect_url} in your host Chrome browser\n"
-                f"2. Click the inspectable page link to see the container's browser\n"
-                f"3. Navigate to any service and log in (Google, NotebookLM, X, etc.)\n"
-                f"4. All cookies and sessions persist in the container\n"
+                f"1. Open the bridge viewer from the sidebar or the URL above\n"
+                f"2. Navigate to any service and log in (Google, NotebookLM, X, etc.)\n"
+                f"3. All cookies and sessions persist in the container\n"
+                f"4. The observer is recording — it learns auth patterns and site maps\n"
                 f"5. When done, tell me to close the bridge\n\n"
                 f"After the user logs in, my browser_agent tool will have access "
                 f"to those authenticated sessions automatically."

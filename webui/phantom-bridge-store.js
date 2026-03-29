@@ -7,7 +7,8 @@ async function api(endpoint, body = {}) {
 
 export const store = createStore("phantomBridge", {
     running: false,
-    connectUrl: "",
+    novncUrl: "",
+    novncReady: false,
     authEntries: [],
     authCount: 0,
     sitemapEntries: [],
@@ -21,7 +22,7 @@ export const store = createStore("phantomBridge", {
 
     async onOpen() {
         await this.fetchStatus();
-        this._pollInterval = setInterval(() => this.fetchStatus(), 10000);
+        this._pollInterval = setInterval(() => this.fetchStatus(), 5000);
     },
 
     cleanup() {
@@ -35,7 +36,8 @@ export const store = createStore("phantomBridge", {
         try {
             const status = await api("bridge", { action: "status" });
             this.running = status.running || false;
-            this.connectUrl = status.connect_url || "";
+            this.novncReady = status.novnc_running || false;
+            this.novncUrl = status.novnc_url || "";
 
             const auth = await api("bridge", { action: "auth_registry" });
             const registry = auth.registry || {};
@@ -64,10 +66,13 @@ export const store = createStore("phantomBridge", {
 
     async startBridge() {
         try {
+            const { toastFrontendInfo } = await import("/components/notifications/notification-store.js");
+            toastFrontendInfo("Starting bridge...", "Phantom Bridge");
             await api("bridge", { action: "start" });
             await this.fetchStatus();
         } catch (e) {
-            console.error("Failed to start bridge:", e);
+            const { toastFrontendError } = await import("/components/notifications/notification-store.js");
+            toastFrontendError("Failed to start bridge: " + e.message, "Phantom Bridge");
         }
     },
 
@@ -75,13 +80,19 @@ export const store = createStore("phantomBridge", {
         try {
             await api("bridge", { action: "stop" });
             this.running = false;
+            this.novncReady = false;
             await this.fetchStatus();
         } catch (e) {
-            console.error("Failed to stop bridge:", e);
+            const { toastFrontendError } = await import("/components/notifications/notification-store.js");
+            toastFrontendError("Failed to stop bridge: " + e.message, "Phantom Bridge");
         }
     },
 
     openBridge() {
-        window.open("/usr/plugins/phantom_bridge/webui/bridge.html", "_blank");
+        if (this.novncReady && this.novncUrl) {
+            window.open(`/plugins/phantom_bridge/webui/bridge.html`, "_blank");
+        } else {
+            window.open(this.novncUrl || "http://localhost:6080/vnc.html?autoconnect=true&resize=scale", "_blank");
+        }
     },
 });

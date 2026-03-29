@@ -47,6 +47,7 @@ class BrowserBridge:
         window_height: int = 900,
         default_url: str = "about:blank",
         executable_path: str | None = None,
+        novnc_port: int = 6080,
     ):
         self.profile_dir = Path(profile_dir)
         self.remote_debug_port = remote_debug_port
@@ -56,10 +57,13 @@ class BrowserBridge:
         self.window_height = window_height
         self.default_url = default_url
         self.executable_path = executable_path
+        self.novnc_port = novnc_port
 
         self._process: subprocess.Popen | None = None  # type: ignore[type-arg]
         self._started_at: float | None = None
         self._observer_manager = None
+        self._vnc_process: subprocess.Popen | None = None  # type: ignore[type-arg]
+        self._websockify_process: subprocess.Popen | None = None  # type: ignore[type-arg]
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -139,6 +143,9 @@ class BrowserBridge:
             logger.warning("browser_bridge: observer layers failed to start: %s", e)
             self._observer_manager = None
 
+        # Start noVNC (x11vnc + websockify) for remote browser control
+        self._start_novnc()
+
         return self.status()
 
     async def stop(self) -> dict[str, Any]:
@@ -156,6 +163,9 @@ class BrowserBridge:
             except Exception as e:
                 logger.warning("browser_bridge: error stopping observers: %s", e)
             self._observer_manager = None
+
+        # Stop noVNC processes
+        self._stop_novnc()
 
         pid = self._process.pid if self._process else None
         try:
@@ -191,6 +201,9 @@ class BrowserBridge:
         if running and self._started_at:
             info["uptime_seconds"] = int(time.time() - self._started_at)
             info["connect_url"] = f"http://localhost:{self.remote_debug_port}"
+            info["novnc_url"] = f"http://localhost:{self.novnc_port}/vnc.html?autoconnect=true&resize=scale"
+            info["novnc_port"] = self.novnc_port
+            info["novnc_running"] = self._vnc_process is not None and self._vnc_process.poll() is None
             info["pid"] = self._process.pid if self._process else None
 
         # List active pages via DevTools JSON endpoint
@@ -236,6 +249,103 @@ class BrowserBridge:
             shutil.rmtree(self.profile_dir)
             self.profile_dir.mkdir(parents=True, exist_ok=True)
             logger.info("browser_bridge: profile cleared at %s", self.profile_dir)
+
+    # ------------------------------------------------------------------
+    # noVNC (x11vnc + websockify)
+    # ------------------------------------------------------------------
+
+    def _start_novnc(self) -> None:
+        """Launch x11vnc and websockify for noVNC browser control."""
+        display = os.environ.get("DISPLAY", ":99")
+        vnc_port = 5900
+
+        # Start x11vnc — captures the Xvfb display
+        x11vnc_bin = shutil.which("x11vnc")
+        if not x11vnc_bin:
+            logger.warning(
+                "browser_bridge: x11vnc not found — noVNC disabled. "
+                "Run the plugin's execute.py to install dependencies."
+            )
+            return
+
+        try:
+            self._vnc_process = subprocess.Popen(
+                [
+                    x11vnc_bin,
+                    "-display", display,
+                    "-nopw",
+                    "-forever",
+                    "-shared",
+                    "-rfbport", str(vnc_port),
+                    "-quiet",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            logger.info("browser_bridge: x11vnc started on :%d (display %s)", vnc_port, display)
+        except Exception as e:
+            logger.warning("browser_bridge: failed to start x11vnc: %s", e)
+            return
+
+        # Start websockify — bridges VNC over WebSocket + serves noVNC HTML
+        websockify_bin = shutil.which("websockify")
+        novnc_web = self._find_novnc_web_dir()
+
+        if not websockify_bin:
+            logger.warning("browser_bridge: websockify not found — noVNC disabled")
+            return
+
+        ws_args = [
+            websockify_bin,
+            "--web", novnc_web,
+            str(self.novnc_port),
+            f"localhost:{vnc_port}",
+        ]
+
+        try:
+            self._websockify_process = subprocess.Popen(
+                ws_args,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            logger.info(
+                "browser_bridge: noVNC ready at http://localhost:%d/vnc.html",
+                self.novnc_port,
+            )
+        except Exception as e:
+            logger.warning("browser_bridge: failed to start websockify: %s", e)
+
+    def _stop_novnc(self) -> None:
+        """Stop noVNC processes."""
+        for name, proc_attr in [("websockify", "_websockify_process"), ("x11vnc", "_vnc_process")]:
+            proc = getattr(self, proc_attr, None)
+            if proc is None:
+                continue
+            try:
+                proc.terminate()
+                proc.wait(timeout=3)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+            setattr(self, proc_attr, None)
+            logger.info("browser_bridge: %s stopped", name)
+
+    @staticmethod
+    def _find_novnc_web_dir() -> str:
+        """Find the noVNC static files directory."""
+        candidates = [
+            "/usr/share/novnc",          # Debian/Ubuntu apt package
+            "/usr/share/novnc/utils/../", # Alternate layout
+            "/opt/novnc",                 # Manual install
+        ]
+        for path in candidates:
+            check = Path(path)
+            if check.exists() and (check / "vnc.html").exists():
+                return str(check)
+        # Fallback — websockify will fail gracefully if path is wrong
+        return "/usr/share/novnc"
 
     # ------------------------------------------------------------------
     # Internals
@@ -400,4 +510,5 @@ def create_bridge_from_config(config: dict[str, Any] | None = None) -> BrowserBr
         window_height=config.get("window_height", 900),
         default_url=config.get("default_url", "about:blank"),
         executable_path=config.get("executable_path"),
+        novnc_port=config.get("novnc_port", 6080),
     )

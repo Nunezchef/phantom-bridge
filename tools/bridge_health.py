@@ -90,7 +90,7 @@ class BridgeHealth(Tool):
     def _get_observer_manager(self) -> Any | None:
         """Get the ObserverManager instance from the bridge."""
         try:
-            from plugins.browser_bridge.bridge import get_bridge
+            from usr.plugins.phantom_bridge.bridge import get_bridge
 
             bridge = get_bridge()
             if bridge and bridge.is_running():

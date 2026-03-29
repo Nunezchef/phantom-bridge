@@ -211,7 +211,7 @@ class BridgeReplay(Tool):
         could not be performed (observer unavailable).
         """
         try:
-            from plugins.browser_bridge.bridge import get_bridge
+            from usr.plugins.phantom_bridge.bridge import get_bridge
 
             bridge = get_bridge()
             if bridge and bridge.is_running():
@@ -226,7 +226,7 @@ class BridgeReplay(Tool):
     def _get_recorder(self) -> Any | None:
         """Get the PlaybookRecorder instance."""
         try:
-            from plugins.browser_bridge.bridge import get_bridge
+            from usr.plugins.phantom_bridge.bridge import get_bridge
             bridge = get_bridge()
             if bridge and hasattr(bridge, "_playbook_recorder"):
                 return bridge._playbook_recorder
@@ -245,7 +245,7 @@ class BridgeReplay(Tool):
     def _get_profile_dir(self) -> str:
         """Resolve the bridge's profile directory."""
         try:
-            from plugins.browser_bridge.bridge import get_bridge
+            from usr.plugins.phantom_bridge.bridge import get_bridge
             bridge = get_bridge()
             if bridge:
                 return str(bridge.get_profile_dir())

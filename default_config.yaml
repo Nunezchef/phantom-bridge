@@ -24,3 +24,7 @@ auto_close_seconds: 0
 # Bind address for the debug port inside the container
 # Use 0.0.0.0 to allow connections from host via port mapping
 bind_address: "0.0.0.0"
+
+# noVNC port — serves the HTML5 VNC viewer + WebSocket proxy
+# Access at http://localhost:6080/vnc.html
+novnc_port: 6080

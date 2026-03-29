@@ -18,7 +18,7 @@ logger = logging.getLogger("phantom_bridge")
 class BrowserBridgeAuth(Tool):
 
     async def execute(self, **kwargs: Any) -> Response:
-        from plugins.browser_bridge.bridge import get_bridge
+        from usr.plugins.phantom_bridge.bridge import get_bridge
 
         bridge = get_bridge()
 
@@ -34,7 +34,7 @@ class BrowserBridgeAuth(Tool):
 
         # Try to get the observer manager's auth registry
         try:
-            from plugins.browser_bridge.observer import ObserverManager
+            from usr.plugins.phantom_bridge.observer import ObserverManager
 
             # Check if an observer manager is attached to the bridge
             manager = getattr(bridge, "_observer_manager", None)

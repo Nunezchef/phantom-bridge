@@ -136,7 +136,7 @@ class BridgeRecord(Tool):
     def _get_recorder(self) -> Any | None:
         """Get the PlaybookRecorder instance from the bridge plugin."""
         try:
-            from plugins.browser_bridge.bridge import get_bridge
+            from usr.plugins.phantom_bridge.bridge import get_bridge
             bridge = get_bridge()
             if bridge and hasattr(bridge, "_playbook_recorder"):
                 return bridge._playbook_recorder

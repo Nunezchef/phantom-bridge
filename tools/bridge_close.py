@@ -18,7 +18,7 @@ logger = logging.getLogger("browser_bridge")
 class BrowserBridgeClose(Tool):
 
     async def execute(self, clear_profile: str = "", **kwargs: Any) -> Response:
-        from plugins.browser_bridge.bridge import get_bridge
+        from usr.plugins.phantom_bridge.bridge import get_bridge
 
         bridge = get_bridge()
 

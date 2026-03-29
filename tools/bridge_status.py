@@ -18,13 +18,13 @@ logger = logging.getLogger("browser_bridge")
 class BrowserBridgeStatus(Tool):
 
     async def execute(self, **kwargs: Any) -> Response:
-        from plugins.browser_bridge.bridge import get_bridge
+        from usr.plugins.phantom_bridge.bridge import get_bridge
 
         bridge = get_bridge()
 
         if not bridge or not bridge.is_running():
             # Check if a profile exists even though bridge is off
-            from plugins.browser_bridge.bridge import create_bridge_from_config
+            from usr.plugins.phantom_bridge.bridge import create_bridge_from_config
 
             config = self._load_config()
             tmp_bridge = create_bridge_from_config(config)

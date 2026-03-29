@@ -3,385 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Phantom Bridge</title>
+    <title>Phantom Bridge — Remote Browser</title>
+    <script type="module" src="/plugins/phantom_bridge/webui/phantom-bridge-store.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: system-ui, -apple-system, sans-serif;
             background: #0f0f0f; color: #e0e0e0;
-            min-height: 100vh;
+            height: 100vh; display: flex; flex-direction: column;
         }
 
         .header {
             display: flex; align-items: center; gap: 12px;
-            padding: 16px 24px;
+            padding: 12px 20px;
             background: #1a1a1a; border-bottom: 1px solid #2a2a2a;
+            flex-shrink: 0;
         }
-        .header h1 { font-size: 1.1em; font-weight: 600; }
+        .header h1 { font-size: 1em; font-weight: 600; }
         .header .status {
-            margin-left: auto; font-size: 0.85em;
+            margin-left: auto; font-size: 0.8em;
             display: flex; align-items: center; gap: 6px;
         }
         .dot { width: 8px; height: 8px; border-radius: 50%; }
         .dot-on { background: #22c55e; box-shadow: 0 0 6px #22c55e66; }
         .dot-off { background: #666; }
 
-        .toolbar {
-            display: flex; align-items: center; gap: 8px;
-            padding: 10px 24px;
-            background: #151515; border-bottom: 1px solid #2a2a2a;
-        }
-        .url-bar {
-            flex: 1; padding: 8px 14px;
-            background: #222; border: 1px solid #333; border-radius: 8px;
-            color: #e0e0e0; font-size: 0.9em; font-family: 'SF Mono', monospace;
-            outline: none;
-        }
-        .url-bar:focus { border-color: #6366f1; }
-        .nav-btn {
-            padding: 8px 14px; background: #6366f1; color: white;
-            border: none; border-radius: 8px; cursor: pointer;
-            font-size: 0.85em; font-weight: 500;
-        }
-        .nav-btn:hover { background: #5558e6; }
-        .nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-        .nav-btn.secondary { background: #333; }
-        .nav-btn.secondary:hover { background: #444; }
-
-        .browser-frame {
-            position: relative;
-            margin: 16px 24px;
-            background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px;
-            overflow: hidden; min-height: 500px;
-        }
-        .browser-frame img {
-            width: 100%; display: block; cursor: pointer;
-        }
-        .browser-frame .loading {
-            position: absolute; inset: 0;
-            display: flex; align-items: center; justify-content: center;
-            background: #1a1a1a; font-size: 0.9em; opacity: 0.5;
-        }
-        .browser-frame.keyboard-active {
-            border-color: #6366f1;
-            box-shadow: 0 0 0 2px #6366f133;
+        .vnc-frame {
+            flex: 1; border: none; width: 100%;
+            background: #0f0f0f;
         }
 
-        .pages-bar {
-            display: flex; gap: 4px; padding: 8px 24px;
-            background: #151515; border-bottom: 1px solid #2a2a2a;
-            overflow-x: auto;
+        .fallback {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            flex-direction: column; gap: 16px; opacity: 0.5;
         }
-        .tab {
-            padding: 6px 14px; background: #222; border: 1px solid #333;
-            border-radius: 6px; font-size: 0.8em; cursor: pointer;
-            white-space: nowrap; max-width: 200px; overflow: hidden;
-            text-overflow: ellipsis;
+        .fallback p { font-size: 0.9em; max-width: 400px; text-align: center; line-height: 1.5; }
+        .fallback code {
+            background: #222; padding: 8px 16px; border-radius: 8px;
+            font-family: 'SF Mono', monospace; font-size: 0.85em;
         }
-        .tab.active { background: #6366f133; border-color: #6366f1; color: #a5b4fc; }
-        .tab:hover { background: #2a2a2a; }
-
-        .info-bar {
-            padding: 12px 24px; font-size: 0.75em; opacity: 0.4;
-            text-align: center;
-        }
-        .keyboard-hint {
-            padding: 6px 24px; font-size: 0.75em;
-            background: #6366f111; color: #a5b4fc;
-            text-align: center; display: none;
-        }
-        .keyboard-hint.visible { display: block; }
     </style>
 </head>
 <body>
-    <div class="header">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <rect width="24" height="24" rx="6" fill="#6366f1"/>
-            <circle cx="12" cy="10" r="4" stroke="white" stroke-width="1.5" fill="none"/>
-            <path d="M8 18c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-        </svg>
-        <h1>Phantom Bridge</h1>
-        <div class="status">
-            <span class="dot" id="statusDot"></span>
-            <span id="statusText">Connecting...</span>
-        </div>
+    <div x-data>
+        <template x-if="$store.phantomBridge">
+            <div style="display:contents;" x-init="$store.phantomBridge.onOpen()">
+
+                <div class="header">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <rect width="24" height="24" rx="6" fill="#6366f1"/>
+                        <circle cx="12" cy="10" r="4" stroke="white" stroke-width="1.5" fill="none"/>
+                        <path d="M8 18c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+                    </svg>
+                    <h1>Phantom Bridge</h1>
+                    <div class="status">
+                        <span class="dot" :class="$store.phantomBridge.running ? 'dot-on' : 'dot-off'"></span>
+                        <span x-text="$store.phantomBridge.running ? 'Bridge Open' : 'Offline'"></span>
+                    </div>
+                </div>
+
+                <template x-if="$store.phantomBridge.novncReady">
+                    <iframe class="vnc-frame"
+                            :src="$store.phantomBridge.novncUrl"
+                            allow="clipboard-read; clipboard-write">
+                    </iframe>
+                </template>
+
+                <template x-if="!$store.phantomBridge.novncReady">
+                    <div class="fallback">
+                        <p>noVNC is not available. Make sure the bridge is running and dependencies are installed.</p>
+                        <code>python execute.py</code>
+                        <p>Then ask A0 to open the browser bridge.</p>
+                    </div>
+                </template>
+
+            </div>
+        </template>
     </div>
-
-    <div class="pages-bar" id="pagesBar"></div>
-
-    <div class="toolbar">
-        <button class="nav-btn secondary" onclick="goBack()" title="Back">&#8592;</button>
-        <button class="nav-btn secondary" onclick="doReload()" title="Refresh">&#8635;</button>
-        <input class="url-bar" id="urlBar" placeholder="Enter URL and press Enter" onkeydown="if(event.key==='Enter')navigate()">
-        <button class="nav-btn" onclick="navigate()">Go</button>
-    </div>
-
-    <div class="keyboard-hint" id="keyboardHint">
-        Keyboard active — typing goes to the remote browser. Click outside the frame or press Escape to release.
-    </div>
-
-    <div class="browser-frame" id="browserFrame" tabindex="0"
-         onclick="handleClick(event)"
-         onfocus="activateKeyboard()"
-         onblur="deactivateKeyboard()">
-        <div class="loading" id="loadingOverlay">
-            <span>Starting bridge...</span>
-        </div>
-        <img id="screenshot" style="display:none;" alt="Browser view" draggable="false">
-    </div>
-
-    <div class="info-bar">
-        Phantom Bridge — browsing through A0's internal Chromium. All sessions persist in the container.
-        <br>Click the screenshot to interact. Click again to enable keyboard input.
-    </div>
-
-    <script type="module">
-        import { callJsonApi } from "/js/api.js";
-
-        let currentPageId = null;
-        let pages = [];
-        let refreshInterval = null;
-        let screenshotInterval = null;
-        let keyboardActive = false;
-
-        async function api(action, params = {}) {
-            return callJsonApi("plugins/phantom_bridge/proxy", { action, ...params });
-        }
-
-        async function bridgeApi(action, params = {}) {
-            return callJsonApi("plugins/phantom_bridge/bridge", { action, ...params });
-        }
-
-        // Expose functions to inline handlers
-        window.navigate = navigate;
-        window.selectPage = selectPage;
-        window.goBack = goBack;
-        window.doReload = doReload;
-        window.handleClick = handleClick;
-        window.activateKeyboard = activateKeyboard;
-        window.deactivateKeyboard = deactivateKeyboard;
-
-        async function init() {
-            const status = await bridgeApi("status");
-            if (!status.running) {
-                document.getElementById("loadingOverlay").querySelector("span").textContent = "Starting bridge...";
-                await bridgeApi("start");
-                await new Promise(r => setTimeout(r, 2000));
-            }
-
-            await refreshPages();
-            updateStatus(true);
-
-            screenshotInterval = setInterval(takeScreenshot, 1500);
-            refreshInterval = setInterval(refreshPages, 5000);
-
-            // Keyboard event forwarding
-            document.getElementById("browserFrame").addEventListener("keydown", handleKeyDown);
-            document.getElementById("browserFrame").addEventListener("keyup", handleKeyUp);
-        }
-
-        async function refreshPages() {
-            const data = await api("pages");
-            if (!data.ok || !data.pages) {
-                updateStatus(false);
-                return;
-            }
-
-            pages = data.pages.filter(p => p.type === "page");
-            updateStatus(true);
-
-            const bar = document.getElementById("pagesBar");
-            bar.innerHTML = pages.map(p =>
-                `<div class="tab ${p.id === currentPageId ? 'active' : ''}"
-                     onclick="selectPage('${p.id}')"
-                     title="${p.url}">${p.title || p.url || 'New Tab'}</div>`
-            ).join("");
-
-            if (!currentPageId && pages.length > 0) {
-                selectPage(pages[0].id);
-            }
-
-            const activePage = pages.find(p => p.id === currentPageId);
-            if (activePage) {
-                document.getElementById("urlBar").value = activePage.url || "";
-            }
-        }
-
-        function selectPage(pageId) {
-            currentPageId = pageId;
-            refreshPages();
-            takeScreenshot();
-        }
-
-        async function takeScreenshot() {
-            if (!currentPageId) return;
-
-            const data = await api("screenshot", { page_id: currentPageId });
-            if (data.ok && data.screenshot) {
-                const img = document.getElementById("screenshot");
-                img.src = "data:image/jpeg;base64," + data.screenshot;
-                img.style.display = "block";
-                document.getElementById("loadingOverlay").style.display = "none";
-            }
-        }
-
-        async function navigate() {
-            const url = document.getElementById("urlBar").value.trim();
-            if (!url) return;
-
-            let fullUrl = url;
-            if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                fullUrl = "https://" + url;
-            }
-
-            if (!currentPageId && pages.length > 0) {
-                currentPageId = pages[0].id;
-            }
-
-            if (currentPageId) {
-                await api("navigate", { page_id: currentPageId, url: fullUrl });
-                document.getElementById("urlBar").value = fullUrl;
-                setTimeout(takeScreenshot, 1000);
-                setTimeout(refreshPages, 1500);
-            }
-        }
-
-        async function doReload() {
-            if (!currentPageId) return;
-            await api("reload", { page_id: currentPageId });
-            setTimeout(takeScreenshot, 1000);
-            setTimeout(refreshPages, 1500);
-        }
-
-        async function goBack() {
-            if (!currentPageId) return;
-            await api("go_back", { page_id: currentPageId });
-            setTimeout(takeScreenshot, 1000);
-            setTimeout(refreshPages, 1500);
-        }
-
-        async function handleClick(event) {
-            if (!currentPageId) return;
-
-            const img = document.getElementById("screenshot");
-            if (!img.naturalWidth) return;
-
-            // Don't process clicks on the loading overlay
-            if (event.target.id === "loadingOverlay") return;
-
-            const rect = img.getBoundingClientRect();
-            const scaleX = img.naturalWidth / rect.width;
-            const scaleY = img.naturalHeight / rect.height;
-
-            const x = Math.round((event.clientX - rect.left) * scaleX);
-            const y = Math.round((event.clientY - rect.top) * scaleY);
-
-            // Clamp to viewport
-            if (x < 0 || y < 0 || x > img.naturalWidth || y > img.naturalHeight) return;
-
-            try {
-                await callJsonApi("plugins/phantom_bridge/click", {
-                    page_id: currentPageId, x, y
-                });
-                // Quick screenshot to show result
-                setTimeout(takeScreenshot, 300);
-                setTimeout(takeScreenshot, 1000);
-                setTimeout(refreshPages, 1500);
-            } catch (e) {
-                console.error("Click failed:", e);
-            }
-
-            // Activate keyboard on click
-            activateKeyboard();
-        }
-
-        // ---------------------------------------------------------------
-        // Keyboard forwarding
-        // ---------------------------------------------------------------
-
-        function activateKeyboard() {
-            keyboardActive = true;
-            document.getElementById("browserFrame").classList.add("keyboard-active");
-            document.getElementById("keyboardHint").classList.add("visible");
-        }
-
-        function deactivateKeyboard() {
-            keyboardActive = false;
-            document.getElementById("browserFrame").classList.remove("keyboard-active");
-            document.getElementById("keyboardHint").classList.remove("visible");
-        }
-
-        async function handleKeyDown(event) {
-            if (!keyboardActive || !currentPageId) return;
-
-            // Let Escape release keyboard focus
-            if (event.key === "Escape") {
-                deactivateKeyboard();
-                document.getElementById("browserFrame").blur();
-                return;
-            }
-
-            // Don't intercept browser shortcuts (Ctrl+T, Ctrl+W, etc.)
-            if ((event.ctrlKey || event.metaKey) && ["t", "w", "n", "l", "r"].includes(event.key.toLowerCase())) {
-                return;
-            }
-
-            event.preventDefault();
-            event.stopPropagation();
-
-            const action = event.key.length === 1 ? "type_text" : "key";
-
-            try {
-                if (action === "type_text") {
-                    await callJsonApi("plugins/phantom_bridge/keyboard", {
-                        page_id: currentPageId,
-                        action: "type_text",
-                        text: event.key,
-                        modifiers: {
-                            alt: event.altKey,
-                            ctrl: event.ctrlKey,
-                            meta: event.metaKey,
-                            shift: event.shiftKey,
-                        },
-                    });
-                } else {
-                    await callJsonApi("plugins/phantom_bridge/keyboard", {
-                        page_id: currentPageId,
-                        action: "key",
-                        key: event.key,
-                        code: event.code,
-                        modifiers: {
-                            alt: event.altKey,
-                            ctrl: event.ctrlKey,
-                            meta: event.metaKey,
-                            shift: event.shiftKey,
-                        },
-                    });
-                }
-                // Update screenshot after typing
-                setTimeout(takeScreenshot, 300);
-            } catch (e) {
-                console.error("Key event failed:", e);
-            }
-        }
-
-        function handleKeyUp(event) {
-            if (!keyboardActive || !currentPageId) return;
-            if (event.key === "Escape") return;
-            if ((event.ctrlKey || event.metaKey) && ["t", "w", "n", "l", "r"].includes(event.key.toLowerCase())) return;
-            event.preventDefault();
-            event.stopPropagation();
-            // keyUp is sent by the keyboard API handler as part of the key sequence
-        }
-
-        function updateStatus(connected) {
-            const dot = document.getElementById("statusDot");
-            const text = document.getElementById("statusText");
-            dot.className = connected ? "dot dot-on" : "dot dot-off";
-            text.textContent = connected ? `${pages.length} page(s)` : "Disconnected";
-        }
-
-        init();
-    </script>
 </body>
 </html>

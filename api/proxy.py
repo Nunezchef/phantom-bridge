@@ -1,13 +1,7 @@
-"""CDP Proxy — forwards Chrome DevTools Protocol HTTP endpoints through A0's port.
-
-Proxies /json, /json/version, and screenshot endpoints so users don't need
-port 9222 exposed. For WebSocket DevTools connections, serves a landing page
-that establishes a WebSocket relay via the browser's own fetch API.
-"""
+"""CDP Proxy — exposes Chrome DevTools Protocol page list through A0's port."""
 
 import json
 import urllib.request
-import base64
 from helpers.api import ApiHandler, Request, Response as FlaskResponse
 
 CDP_BASE = "http://127.0.0.1:9222"
@@ -22,7 +16,7 @@ class ProxyHandler(ApiHandler):
 
     @classmethod
     def requires_csrf(cls) -> bool:
-        return False  # CDP proxy needs GET without CSRF
+        return False
 
     async def process(self, input: dict, request: Request) -> dict:
         action = input.get("action", "pages")
@@ -31,22 +25,6 @@ class ProxyHandler(ApiHandler):
             return self._proxy_json()
         elif action == "version":
             return self._proxy_version()
-        elif action == "screenshot":
-            page_id = input.get("page_id", "")
-            return await self._screenshot(page_id)
-        elif action == "navigate":
-            page_id = input.get("page_id", "")
-            url = input.get("url", "")
-            return await self._navigate(page_id, url)
-        elif action == "reload":
-            page_id = input.get("page_id", "")
-            return await self._reload(page_id)
-        elif action == "go_back":
-            page_id = input.get("page_id", "")
-            return await self._go_back(page_id)
-        elif action == "close_tab":
-            page_id = input.get("page_id", "")
-            return await self._close_tab(page_id)
         else:
             return {"ok": False, "error": f"Unknown action: {action}"}
 
@@ -65,147 +43,5 @@ class ProxyHandler(ApiHandler):
             with urllib.request.urlopen(f"{CDP_BASE}/json/version", timeout=3) as resp:
                 version = json.loads(resp.read().decode())
                 return {"ok": True, "version": version}
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-
-    async def _screenshot(self, page_id: str) -> dict:
-        """Take a screenshot of a page via CDP WebSocket."""
-        if not page_id:
-            return {"ok": False, "error": "page_id required"}
-
-        try:
-            import websockets
-
-            ws_url = self._find_ws_url(page_id)
-            if not ws_url:
-                return {"ok": False, "error": f"Page {page_id} not found"}
-
-            # Connect and take screenshot
-            async with websockets.connect(ws_url) as ws:
-                await ws.send(json.dumps({
-                    "id": 1,
-                    "method": "Page.captureScreenshot",
-                    "params": {"format": "jpeg", "quality": 70}
-                }))
-                result = await self._recv_response(ws, 1)
-                if "result" in result and "data" in result["result"]:
-                    return {
-                        "ok": True,
-                        "screenshot": result["result"]["data"],  # base64 JPEG
-                        "format": "jpeg",
-                    }
-                return {"ok": False, "error": "Screenshot failed"}
-
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-
-    async def _navigate(self, page_id: str, url: str) -> dict:
-        """Navigate a page to a URL via CDP."""
-        if not page_id or not url:
-            return {"ok": False, "error": "page_id and url required"}
-
-        try:
-            import websockets
-
-            ws_url = self._find_ws_url(page_id)
-            if not ws_url:
-                return {"ok": False, "error": f"Page {page_id} not found"}
-
-            async with websockets.connect(ws_url) as ws:
-                await ws.send(json.dumps({
-                    "id": 1,
-                    "method": "Page.navigate",
-                    "params": {"url": url}
-                }))
-                result = await self._recv_response(ws, 1)
-                return {"ok": True, "result": result.get("result", {})}
-
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-
-    async def _reload(self, page_id: str) -> dict:
-        """Reload the current page via JS evaluation."""
-        if not page_id:
-            return {"ok": False, "error": "page_id required"}
-
-        try:
-            import websockets
-
-            ws_url = self._find_ws_url(page_id)
-            if not ws_url:
-                return {"ok": False, "error": f"Page {page_id} not found"}
-
-            async with websockets.connect(ws_url) as ws:
-                await ws.send(json.dumps({
-                    "id": 1,
-                    "method": "Runtime.evaluate",
-                    "params": {"expression": "window.location.reload()"}
-                }))
-                # Read responses until we get our command response (skip events)
-                result = await self._recv_response(ws, 1)
-                return {"ok": True}
-
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-
-    async def _go_back(self, page_id: str) -> dict:
-        """Navigate back in history via JS evaluation."""
-        if not page_id:
-            return {"ok": False, "error": "page_id required"}
-
-        try:
-            import websockets
-
-            ws_url = self._find_ws_url(page_id)
-            if not ws_url:
-                return {"ok": False, "error": f"Page {page_id} not found"}
-
-            async with websockets.connect(ws_url) as ws:
-                await ws.send(json.dumps({
-                    "id": 1,
-                    "method": "Runtime.evaluate",
-                    "params": {"expression": "window.history.back()"}
-                }))
-                result = await self._recv_response(ws, 1)
-                return {"ok": True}
-
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-
-    def _find_ws_url(self, page_id: str) -> str | None:
-        """Look up the WebSocket debugger URL for a page."""
-        with urllib.request.urlopen(f"{CDP_BASE}/json", timeout=3) as resp:
-            pages = json.loads(resp.read().decode())
-        for page in pages:
-            if page.get("id") == page_id:
-                return page.get("webSocketDebuggerUrl")
-        return None
-
-    @staticmethod
-    async def _recv_response(ws, msg_id: int, timeout: float = 5.0):
-        """Read from WebSocket until we get the response matching msg_id.
-        Skips CDP event notifications that arrive before the response."""
-        import asyncio
-        deadline = asyncio.get_event_loop().time() + timeout
-        while asyncio.get_event_loop().time() < deadline:
-            try:
-                raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
-                msg = json.loads(raw)
-                if msg.get("id") == msg_id:
-                    return msg
-                # Otherwise it's a CDP event — skip it
-            except asyncio.TimeoutError:
-                break
-        return {}
-
-    async def _close_tab(self, page_id: str) -> dict:
-        """Close a browser tab via CDP."""
-        if not page_id:
-            return {"ok": False, "error": "page_id required"}
-
-        try:
-            url = f"{CDP_BASE}/json/close/{page_id}"
-            with urllib.request.urlopen(url, timeout=3) as resp:
-                return {"ok": True, "closed": page_id}
         except Exception as e:
             return {"ok": False, "error": str(e)}

@@ -99,25 +99,33 @@
                     </button>
                 </template>
 
-                <!-- Auth Registry -->
+                <!-- Cookies / Authenticated Domains -->
                 <div class="pb-card" style="margin-top: 12px;">
-                    <div class="pb-section-title">
-                        Authenticated Domains
-                        <span class="pb-mono" style="opacity:0.4; font-weight:400;" x-text="'(' + $store.phantomBridge.authCount + ')'"></span>
+                    <div style="display:flex; align-items:center; justify-content:space-between;">
+                        <div class="pb-section-title" style="margin-bottom:0;">
+                            Authenticated Domains
+                            <span class="pb-mono" style="opacity:0.4; font-weight:400;" x-text="'(' + $store.phantomBridge.cookieDomains.length + ' domains, ' + $store.phantomBridge.cookieTotal + ' cookies)'"></span>
+                        </div>
+                        <template x-if="$store.phantomBridge.cookieTotal > 0">
+                            <button style="background:#ef444422; border:1px solid #ef444444; color:#ef4444; font-size:0.7em; padding:3px 10px; border-radius:6px; cursor:pointer;"
+                                    @click="$store.phantomBridge.deleteAllCookies()">
+                                Delete All
+                            </button>
+                        </template>
                     </div>
-                    <template x-if="$store.phantomBridge.authCount > 0">
-                        <div>
-                            <template x-for="entry in $store.phantomBridge.authEntries" :key="entry.domain">
+                    <template x-if="$store.phantomBridge.cookieDomains.length > 0">
+                        <div style="margin-top:8px;">
+                            <template x-for="entry in $store.phantomBridge.cookieDomains" :key="entry.domain">
                                 <div class="pb-auth-item">
-                                    <span class="pb-dot" :class="entry.authenticated ? 'pb-dot-on' : 'pb-dot-off'"></span>
+                                    <span class="pb-dot pb-dot-on"></span>
                                     <span class="pb-auth-domain" x-text="entry.domain"></span>
-                                    <span class="pb-auth-status" x-text="entry.expires"></span>
+                                    <span class="pb-mono" style="opacity:0.4;" x-text="entry.count + ' cookies'"></span>
                                 </div>
                             </template>
                         </div>
                     </template>
-                    <template x-if="$store.phantomBridge.authCount === 0">
-                        <p class="pb-empty">No authenticated sessions yet. Open the bridge and log in.</p>
+                    <template x-if="$store.phantomBridge.cookieDomains.length === 0">
+                        <p class="pb-empty" style="margin-top:8px;">No cookies yet. Open the bridge and log in.</p>
                     </template>
                 </div>
 

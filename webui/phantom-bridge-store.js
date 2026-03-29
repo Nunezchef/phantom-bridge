@@ -12,6 +12,8 @@ export const store = createStore("phantomBridge", {
     novncPort: 6080,
     authEntries: [],
     authCount: 0,
+    cookieDomains: [],
+    cookieTotal: 0,
     sitemapEntries: [],
     sitemapCount: 0,
     playbooks: [],
@@ -40,6 +42,20 @@ export const store = createStore("phantomBridge", {
             this.novncReady = status.novnc_running || false;
             this.novncUrl = status.novnc_url || "";
             this.novncPort = status.novnc_port || 6080;
+
+            // Auto-export cookies to get fresh counts
+            if (this.running) {
+                await api("bridge", { action: "export_cookies" });
+            }
+
+            // Cookie domains
+            const cookieData = await api("bridge", { action: "cookies" });
+            const cookies = cookieData.cookies || {};
+            this.cookieDomains = Object.entries(cookies).map(([domain, info]) => ({
+                domain,
+                count: info.count || 0,
+            })).sort((a, b) => b.count - a.count);
+            this.cookieTotal = this.cookieDomains.reduce((sum, d) => sum + d.count, 0);
 
             const auth = await api("bridge", { action: "auth_registry" });
             const registry = auth.registry || {};
@@ -87,6 +103,19 @@ export const store = createStore("phantomBridge", {
         } catch (e) {
             const { toastFrontendError } = await import("/components/notifications/notification-store.js");
             toastFrontendError("Failed to stop bridge: " + e.message, "Phantom Bridge");
+        }
+    },
+
+    async deleteAllCookies() {
+        try {
+            const { toastFrontendInfo, toastFrontendSuccess } = await import("/components/notifications/notification-store.js");
+            toastFrontendInfo("Deleting all cookies...", "Phantom Bridge");
+            await api("bridge", { action: "delete_cookies" });
+            toastFrontendSuccess("All cookies deleted", "Phantom Bridge");
+            await this.fetchStatus();
+        } catch (e) {
+            const { toastFrontendError } = await import("/components/notifications/notification-store.js");
+            toastFrontendError("Failed to delete cookies: " + e.message, "Phantom Bridge");
         }
     },
 

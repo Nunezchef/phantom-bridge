@@ -25,6 +25,13 @@ class BridgeHandler(ApiHandler):
             return self._get_sitemaps()
         elif action == "playbooks":
             return self._get_playbooks()
+        elif action == "cookies":
+            return self._get_cookies()
+        elif action == "export_cookies":
+            return await self._export_cookies()
+        elif action == "delete_cookies":
+            domain = input.get("domain", "")
+            return await self._delete_cookies(domain)
         else:
             return {"ok": False, "error": f"Unknown action: {action}"}
 
@@ -95,3 +102,171 @@ class BridgeHandler(ApiHandler):
                 except Exception:
                     pass
         return {"ok": True, "playbooks": result}
+
+    def _get_cookies(self) -> dict:
+        """Return live cookie counts per domain from Chrome via CDP."""
+        # Try to read from cached cookies file (updated by export_cookies)
+        cookies_file = _plugin_root / "data" / "cookies.json"
+        if cookies_file.exists():
+            try:
+                data = json.loads(cookies_file.read_text())
+                summary = {}
+                for domain, cookies in data.items():
+                    summary[domain] = {"count": len(cookies)}
+                return {"ok": True, "cookies": summary, "total_domains": len(data)}
+            except Exception:
+                pass
+        return {"ok": True, "cookies": {}, "total_domains": 0}
+
+    async def _export_cookies(self) -> dict:
+        """Fetch all cookies from Chrome via CDP and save to data/cookies.json."""
+        from usr.plugins.phantom_bridge.bridge import get_bridge
+
+        bridge = get_bridge()
+        if not bridge or not bridge.is_running():
+            return {"ok": False, "error": "Bridge not running"}
+
+        try:
+            import asyncio
+            import websockets
+
+            with urllib.request.urlopen("http://127.0.0.1:9222/json", timeout=3) as resp:
+                targets = json.loads(resp.read().decode())
+            ws_url = next((t["webSocketDebuggerUrl"] for t in targets if t.get("type") == "page"), None)
+            if not ws_url:
+                return {"ok": False, "error": "No page target"}
+
+            async with websockets.connect(ws_url) as ws:
+                responses = {}
+                async def recv():
+                    async for raw in ws:
+                        msg = json.loads(raw)
+                        if "id" in msg: responses[msg["id"]] = msg
+                listener = asyncio.create_task(recv())
+                await ws.send(json.dumps({"id": 1, "method": "Network.getAllCookies"}))
+                for _ in range(50):
+                    if 1 in responses: break
+                    await asyncio.sleep(0.1)
+                listener.cancel()
+                cookies = responses.get(1, {}).get("result", {}).get("cookies", [])
+
+            by_domain = {}
+            for c in cookies:
+                d = c.get("domain", "").lstrip(".")
+                if d:
+                    by_domain.setdefault(d, []).append({
+                        "name": c.get("name"), "value": c.get("value"),
+                        "domain": c.get("domain"), "path": c.get("path", "/"),
+                        "expires": c.get("expires", -1),
+                        "httpOnly": c.get("httpOnly", False),
+                        "secure": c.get("secure", False),
+                    })
+
+            cookies_file = _plugin_root / "data" / "cookies.json"
+            (_plugin_root / "data").mkdir(parents=True, exist_ok=True)
+            cookies_file.write_text(json.dumps(by_domain, indent=2), encoding="utf-8")
+
+            return {"ok": True, "domains": len(by_domain), "total": sum(len(v) for v in by_domain.values())}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    async def _delete_cookies(self, domain: str) -> dict:
+        """Delete cookies — all if domain is empty, or for a specific domain."""
+        from usr.plugins.phantom_bridge.bridge import get_bridge
+
+        bridge = get_bridge()
+        if not bridge or not bridge.is_running():
+            return {"ok": False, "error": "Bridge not running"}
+
+        try:
+            import asyncio
+            import websockets
+
+            url = "http://127.0.0.1:9222/json"
+            with urllib.request.urlopen(url, timeout=3) as resp:
+                targets = json.loads(resp.read().decode())
+
+            ws_url = None
+            for t in targets:
+                if t.get("type") == "page":
+                    ws_url = t.get("webSocketDebuggerUrl")
+                    break
+
+            if not ws_url:
+                return {"ok": False, "error": "No page target found"}
+
+            async with websockets.connect(ws_url) as ws:
+                responses = {}
+                async def recv_loop():
+                    async for raw in ws:
+                        msg = json.loads(raw)
+                        if "id" in msg:
+                            responses[msg["id"]] = msg
+
+                listener = asyncio.create_task(recv_loop())
+
+                if domain:
+                    # Delete cookies for a specific domain
+                    await ws.send(json.dumps({
+                        "id": 1,
+                        "method": "Network.deleteCookies",
+                        "params": {"domain": domain, "name": "*"}
+                    }))
+                    # Also try with dot prefix
+                    await ws.send(json.dumps({
+                        "id": 2,
+                        "method": "Network.deleteCookies",
+                        "params": {"domain": "." + domain.lstrip("."), "name": "*"}
+                    }))
+                else:
+                    # Get all cookies then delete each
+                    await ws.send(json.dumps({
+                        "id": 1,
+                        "method": "Network.getAllCookies"
+                    }))
+                    for _ in range(50):
+                        if 1 in responses:
+                            break
+                        await asyncio.sleep(0.1)
+
+                    cookies = responses.get(1, {}).get("result", {}).get("cookies", [])
+                    msg_id = 10
+                    for c in cookies:
+                        await ws.send(json.dumps({
+                            "id": msg_id,
+                            "method": "Network.deleteCookies",
+                            "params": {
+                                "name": c["name"],
+                                "domain": c.get("domain", ""),
+                                "path": c.get("path", "/"),
+                            }
+                        }))
+                        msg_id += 1
+
+                await asyncio.sleep(0.5)
+                listener.cancel()
+
+            # Clear the exported cookies file
+            cookies_file = _plugin_root / "data" / "cookies.json"
+            if domain:
+                # Remove just this domain from the export
+                if cookies_file.exists():
+                    try:
+                        data = json.loads(cookies_file.read_text())
+                        data.pop(domain, None)
+                        data.pop("." + domain.lstrip("."), None)
+                        cookies_file.write_text(json.dumps(data, indent=2))
+                    except Exception:
+                        pass
+                return {"ok": True, "deleted": domain}
+            else:
+                if cookies_file.exists():
+                    cookies_file.write_text("{}")
+                # Also clear auth registry
+                auth_file = _plugin_root / "data" / "auth_registry.json"
+                if auth_file.exists():
+                    auth_file.write_text("{}")
+                return {"ok": True, "deleted": "all"}
+
+        except Exception as e:
+            return {"ok": False, "error": str(e)}

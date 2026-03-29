@@ -120,30 +120,26 @@
     }
 
     globalThis._phantomBridgeToggle = async function () {
-        const injected = await ensureModalInjected();
-
-        if (injected && globalThis._phantomBridgeModalToggle) {
-            await globalThis._phantomBridgeModalToggle();
-            checkStatus();
+        if (globalThis._phantomBridgeRunning) {
+            // Bridge is running — open noVNC directly
+            const novncUrl = `http://${location.hostname}:6080/vnc.html?autoconnect=true&resize=scale&reconnect=true`;
+            window.open(novncUrl, "phantom-bridge");
         } else {
-            // Fallback: open in new tab
-            if (globalThis._phantomBridgeRunning) {
-                window.open("/usr/plugins/phantom_bridge/webui/bridge.html", "_blank");
-            } else {
-                try {
-                    if (globalThis.toast) globalThis.toast("Starting Phantom Bridge...", "info");
-                    const res = await callJsonApi("plugins/phantom_bridge/bridge", { action: "start" });
-                    if (res?.running || res?.ok) {
-                        globalThis._phantomBridgeRunning = true;
-                        if (globalThis.toast) globalThis.toast("Bridge is live!", "success");
-                        await new Promise(r => setTimeout(r, 3000));
-                        window.open("/usr/plugins/phantom_bridge/webui/bridge.html", "_blank");
-                    } else {
-                        if (globalThis.toast) globalThis.toast(res?.error || "Failed to start bridge", "error");
-                    }
-                } catch (e) {
-                    if (globalThis.toast) globalThis.toast("Error: " + e.message, "error");
+            // Start the bridge first
+            try {
+                if (globalThis.toast) globalThis.toast("Starting Phantom Bridge...", "info");
+                const res = await callJsonApi("plugins/phantom_bridge/bridge", { action: "start" });
+                if (res?.running || res?.ok) {
+                    globalThis._phantomBridgeRunning = true;
+                    if (globalThis.toast) globalThis.toast("Bridge is live!", "success");
+                    await new Promise(r => setTimeout(r, 3000));
+                    const novncUrl = `http://${location.hostname}:6080/vnc.html?autoconnect=true&resize=scale&reconnect=true`;
+                    window.open(novncUrl, "phantom-bridge");
+                } else {
+                    if (globalThis.toast) globalThis.toast(res?.error || "Failed to start bridge", "error");
                 }
+            } catch (e) {
+                if (globalThis.toast) globalThis.toast("Error: " + e.message, "error");
             }
         }
     };

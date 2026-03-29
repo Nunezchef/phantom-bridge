@@ -11,7 +11,9 @@ remote_debug_port: 9222
 profile_dir: data/profile
 
 # Chromium launch options
-headless: true
+# Set to false for noVNC (renders to Xvfb display for remote viewing)
+# Set to true if only using CDP-based tools (no remote viewer)
+headless: false
 window_width: 1280
 window_height: 900
 

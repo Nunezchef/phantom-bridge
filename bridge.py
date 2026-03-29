@@ -62,9 +62,11 @@ class BrowserBridge:
         self._process: subprocess.Popen | None = None  # type: ignore[type-arg]
         self._started_at: float | None = None
         self._observer_manager = None
+        self._xvfb_process: subprocess.Popen | None = None  # type: ignore[type-arg]
         self._vnc_process: subprocess.Popen | None = None  # type: ignore[type-arg]
         self._websockify_process: subprocess.Popen | None = None  # type: ignore[type-arg]
         self._screencast = None
+        self._display: str = os.environ.get("DISPLAY", "")
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -77,8 +79,16 @@ class BrowserBridge:
         if self.is_running():
             return self.status()
 
-        # Ensure profile directory exists
+        # Ensure profile directory exists and clean stale locks
         self.profile_dir.mkdir(parents=True, exist_ok=True)
+        for lock_file in ["SingletonLock", "SingletonCookie", "SingletonSocket"]:
+            lock_path = self.profile_dir / lock_file
+            if lock_path.exists():
+                lock_path.unlink(missing_ok=True)
+                logger.info("browser_bridge: removed stale %s", lock_file)
+
+        # Ensure a display is available (start Xvfb if needed)
+        self._ensure_display()
 
         # Resolve Chromium binary
         chrome_bin = self._resolve_chromium()
@@ -111,11 +121,17 @@ class BrowserBridge:
             self.profile_dir,
         )
 
+        # Set DISPLAY for Chromium to render to Xvfb
+        env = os.environ.copy()
+        if self._display:
+            env["DISPLAY"] = self._display
+
         try:
             self._process = subprocess.Popen(
                 args,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                env=env,
             )
         except FileNotFoundError:
             raise RuntimeError(
@@ -270,12 +286,52 @@ class BrowserBridge:
             logger.info("browser_bridge: profile cleared at %s", self.profile_dir)
 
     # ------------------------------------------------------------------
+    # Display (Xvfb)
+    # ------------------------------------------------------------------
+
+    def _ensure_display(self) -> None:
+        """Start Xvfb if no DISPLAY is set or if the display isn't active."""
+        if self._display and self._xvfb_process is None:
+            # DISPLAY is set — check if it's actually running
+            display_num = self._display.replace(":", "")
+            lock_file = Path(f"/tmp/.X{display_num}-lock")
+            if lock_file.exists():
+                logger.info("browser_bridge: using existing display %s", self._display)
+                return
+
+        # Start our own Xvfb
+        xvfb_bin = shutil.which("Xvfb")
+        if not xvfb_bin:
+            logger.warning("browser_bridge: Xvfb not found — display may not work")
+            return
+
+        display = ":99"
+        try:
+            self._xvfb_process = subprocess.Popen(
+                [
+                    xvfb_bin, display,
+                    "-screen", "0", f"{self.window_width}x{self.window_height}x24",
+                    "-ac", "-nolisten", "tcp",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            self._display = display
+            os.environ["DISPLAY"] = display
+            logger.info("browser_bridge: Xvfb started on display %s", display)
+            # Give Xvfb a moment to start
+            import time
+            time.sleep(0.5)
+        except Exception as e:
+            logger.warning("browser_bridge: failed to start Xvfb: %s", e)
+
+    # ------------------------------------------------------------------
     # noVNC (x11vnc + websockify)
     # ------------------------------------------------------------------
 
     def _start_novnc(self) -> None:
         """Launch x11vnc and websockify for noVNC browser control."""
-        display = os.environ.get("DISPLAY", ":99")
+        display = self._display or os.environ.get("DISPLAY", ":99")
         vnc_port = 5900
 
         # Start x11vnc — captures the Xvfb display
@@ -335,8 +391,8 @@ class BrowserBridge:
             logger.warning("browser_bridge: failed to start websockify: %s", e)
 
     def _stop_novnc(self) -> None:
-        """Stop noVNC processes."""
-        for name, proc_attr in [("websockify", "_websockify_process"), ("x11vnc", "_vnc_process")]:
+        """Stop noVNC and Xvfb processes."""
+        for name, proc_attr in [("websockify", "_websockify_process"), ("x11vnc", "_vnc_process"), ("Xvfb", "_xvfb_process")]:
             proc = getattr(self, proc_attr, None)
             if proc is None:
                 continue

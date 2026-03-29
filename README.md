@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/webicon.png" alt="Phantom Bridge" width="180" />
+  <img src="docs/projecticon.png" alt="Phantom Bridge" width="180" />
 </p>
 
 <h1 align="center">Phantom Bridge</h1>

@@ -156,9 +156,12 @@ class BridgeHandler(ApiHandler):
                         "secure": c.get("secure", False),
                     })
 
-            cookies_file = _plugin_root / "data" / "cookies.json"
-            (_plugin_root / "data").mkdir(parents=True, exist_ok=True)
-            cookies_file.write_text(json.dumps(by_domain, indent=2), encoding="utf-8")
+            # Only save if we actually got cookies — don't overwrite
+            # existing data when Chrome just restarted and cookies aren't loaded yet
+            if by_domain:
+                cookies_file = _plugin_root / "data" / "cookies.json"
+                (_plugin_root / "data").mkdir(parents=True, exist_ok=True)
+                cookies_file.write_text(json.dumps(by_domain, indent=2), encoding="utf-8")
 
             return {"ok": True, "domains": len(by_domain), "total": sum(len(v) for v in by_domain.values())}
         except Exception as e:

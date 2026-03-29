@@ -100,11 +100,13 @@ class BrowserBridge:
                 pass
             return self.status()
 
-        # Ensure profile directory exists and clean stale locks
+        # Ensure profile directory exists and clean stale locks (symlinks!)
         self.profile_dir.mkdir(parents=True, exist_ok=True)
         for lock_file in ["SingletonLock", "SingletonCookie", "SingletonSocket"]:
             lock_path = self.profile_dir / lock_file
-            if lock_path.exists():
+            # These are symlinks — exists() follows the link and returns False
+            # Use is_symlink() or lexists() instead
+            if lock_path.is_symlink() or lock_path.exists():
                 lock_path.unlink(missing_ok=True)
                 logger.info("browser_bridge: removed stale %s", lock_file)
 
@@ -129,6 +131,7 @@ class BrowserBridge:
             "--metrics-recording-only",
             "--no-sandbox",
             "--disable-dev-shm-usage",
+            "--disable-gpu",
         ]
 
         if self.headless:
@@ -148,12 +151,19 @@ class BrowserBridge:
         if self._display:
             env["DISPLAY"] = self._display
 
+        # Launch via helper script to survive A0's process management.
+        # The Playwright ARM64 Chromium build receives SIGTRAP when launched
+        # directly from Python's subprocess.Popen in A0's runtime.
+        launcher = Path(__file__).parent / "launch_chrome.sh"
+        launch_args = [str(launcher)] + args if launcher.exists() else args
+
         try:
             self._process = subprocess.Popen(
-                args,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                launch_args,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
                 env=env,
+                start_new_session=True,
             )
         except FileNotFoundError:
             raise RuntimeError(
@@ -339,15 +349,16 @@ class BrowserBridge:
 
     def _detect_existing_chrome(self) -> bool:
         """Check if Chrome is already running with CDP on our port."""
-        try:
-            import urllib.request
-            url = f"http://127.0.0.1:{self.remote_debug_port}/json/version"
-            with urllib.request.urlopen(url, timeout=2) as resp:
-                if resp.status == 200:
-                    logger.info("browser_bridge: detected existing Chrome on port %d", self.remote_debug_port)
-                    return True
-        except Exception:
-            pass
+        import urllib.request
+        for host in ["127.0.0.1", "[::1]"]:
+            try:
+                url = f"http://{host}:{self.remote_debug_port}/json/version"
+                with urllib.request.urlopen(url, timeout=2) as resp:
+                    if resp.status == 200:
+                        logger.info("browser_bridge: detected existing Chrome on port %d", self.remote_debug_port)
+                        return True
+            except Exception:
+                pass
         return False
 
     # ------------------------------------------------------------------
@@ -509,7 +520,15 @@ class BrowserBridge:
         if self.executable_path:
             return self.executable_path
 
-        # Try A0's Playwright-installed Chromium first
+        # Prefer system Chromium — it works reliably from Python subprocess
+        # (Playwright's ARM64 build crashes with SIGTRAP from Python Popen)
+        for name in ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable"]:
+            path = shutil.which(name)
+            if path:
+                logger.info("browser_bridge: using system Chromium at %s", path)
+                return path
+
+        # Try A0's Playwright-installed Chromium as fallback
         try:
             from helpers.playwright import get_playwright_binary, ensure_playwright_binary
 
@@ -606,22 +625,26 @@ class BrowserBridge:
         except Exception:
             return []
 
-    async def _wait_for_devtools(self, timeout: float = 10.0) -> None:
+    async def _wait_for_devtools(self, timeout: float = 15.0) -> None:
         """Poll the DevTools endpoint until it responds or timeout."""
         import urllib.request
 
-        url = f"http://127.0.0.1:{self.remote_debug_port}/json/version"
+        urls = [
+            f"http://127.0.0.1:{self.remote_debug_port}/json/version",
+            f"http://[::1]:{self.remote_debug_port}/json/version",
+        ]
         deadline = time.time() + timeout
 
         while time.time() < deadline:
-            try:
-                with urllib.request.urlopen(url, timeout=1) as resp:
-                    if resp.status == 200:
-                        logger.info("browser_bridge: DevTools ready on port %d", self.remote_debug_port)
-                        return
-            except Exception:
-                pass
-            await asyncio.sleep(0.3)
+            for url in urls:
+                try:
+                    with urllib.request.urlopen(url, timeout=1) as resp:
+                        if resp.status == 200:
+                            logger.info("browser_bridge: DevTools ready on port %d", self.remote_debug_port)
+                            return
+                except Exception:
+                    pass
+            await asyncio.sleep(0.5)
 
         logger.warning(
             "browser_bridge: DevTools did not respond within %.0fs (may still be starting)",

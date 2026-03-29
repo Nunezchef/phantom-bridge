@@ -298,7 +298,7 @@ class BrowserBridge:
         ws_args = [
             websockify_bin,
             "--web", novnc_web,
-            str(self.novnc_port),
+            f"0.0.0.0:{self.novnc_port}",
             f"localhost:{vnc_port}",
         ]
 

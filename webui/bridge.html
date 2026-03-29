@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Phantom Bridge — Remote Browser</title>
+    <title>Phantom Bridge</title>
     <script type="module" src="/plugins/phantom_bridge/webui/phantom-bridge-store.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -33,27 +33,62 @@
             background: #0f0f0f;
         }
 
-        .fallback {
+        .setup-screen {
             flex: 1; display: flex; align-items: center; justify-content: center;
-            flex-direction: column; gap: 16px; opacity: 0.5;
+            flex-direction: column; gap: 20px; padding: 40px;
         }
-        .fallback p { font-size: 0.9em; max-width: 400px; text-align: center; line-height: 1.5; }
-        .fallback code {
-            background: #222; padding: 8px 16px; border-radius: 8px;
-            font-family: 'SF Mono', monospace; font-size: 0.85em;
+        .setup-card {
+            background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px;
+            padding: 28px; max-width: 520px; width: 100%;
+        }
+        .setup-card h2 { font-size: 1.1em; margin-bottom: 12px; }
+        .setup-card p { font-size: 0.85em; opacity: 0.7; line-height: 1.5; margin-bottom: 12px; }
+        .setup-card code {
+            display: block; background: #111; padding: 12px 16px; border-radius: 8px;
+            font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.82em;
+            color: #a5b4fc; margin: 8px 0; overflow-x: auto; white-space: pre;
+        }
+        .setup-card .step {
+            display: flex; gap: 10px; margin: 10px 0;
+            font-size: 0.85em;
+        }
+        .setup-card .step-num {
+            background: #6366f1; color: white; width: 22px; height: 22px;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            font-size: 0.75em; font-weight: 700; flex-shrink: 0;
+        }
+        .retry-btn {
+            margin-top: 16px; padding: 10px 20px;
+            background: #6366f1; color: white; border: none; border-radius: 8px;
+            cursor: pointer; font-size: 0.85em; font-weight: 500;
+        }
+        .retry-btn:hover { background: #5558e6; }
+
+        .connecting {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            font-size: 0.9em; opacity: 0.5;
         }
     </style>
 </head>
 <body>
-    <div x-data>
+    <div x-data="{ state: 'connecting', novncPort: 6080 }">
         <template x-if="$store.phantomBridge">
-            <div style="display:contents;" x-init="$store.phantomBridge.onOpen()">
+            <div style="display:contents;" x-init="
+                $store.phantomBridge.onOpen();
+                // Try to connect to noVNC
+                const port = $store.phantomBridge.novncPort || 6080;
+                novncPort = port;
+                const testUrl = 'http://' + location.hostname + ':' + port + '/vnc.html';
+                fetch(testUrl, { mode: 'no-cors', signal: AbortSignal.timeout(3000) })
+                    .then(() => { state = 'connected'; })
+                    .catch(() => { state = 'setup'; });
+            ">
 
                 <div class="header">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                        <rect width="24" height="24" rx="6" fill="#6366f1"/>
-                        <circle cx="12" cy="10" r="4" stroke="white" stroke-width="1.5" fill="none"/>
-                        <path d="M8 18c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+                    <svg width="20" height="22" viewBox="0 0 24 28" fill="none">
+                        <path d="M12 0L7.5 5.5 6 8.5l-.5 4 1 3.5-1.5 3L4 22l3.5-1L9 24h2.5l.5-1 .5 1H15l1.5-3 3.5 1-1-2.5-1.5-3 1-3.5L18 8.5 16.5 5.5 12 0z" fill="#6366f1"/>
+                        <path d="M8.5 10.5l3-1-.6 1.8-2.4-.8z" fill="white" opacity="0.95"/>
+                        <path d="M15.5 10.5l-3-1 .6 1.8 2.4-.8z" fill="white" opacity="0.95"/>
                     </svg>
                     <h1>Phantom Bridge</h1>
                     <div class="status">
@@ -62,18 +97,59 @@
                     </div>
                 </div>
 
-                <template x-if="$store.phantomBridge.novncReady">
+                <!-- Connecting state -->
+                <template x-if="state === 'connecting'">
+                    <div class="connecting">Connecting to remote viewer...</div>
+                </template>
+
+                <!-- Connected — show noVNC iframe -->
+                <template x-if="state === 'connected'">
                     <iframe class="vnc-frame"
-                            :src="$store.phantomBridge.novncUrl"
+                            :src="'http://' + location.hostname + ':' + novncPort + '/vnc.html?autoconnect=true&resize=scale&reconnect=true&reconnect_delay=1000'"
                             allow="clipboard-read; clipboard-write">
                     </iframe>
                 </template>
 
-                <template x-if="!$store.phantomBridge.novncReady">
-                    <div class="fallback">
-                        <p>noVNC is not available. Make sure the bridge is running and dependencies are installed.</p>
-                        <code>python execute.py</code>
-                        <p>Then ask A0 to open the browser bridge.</p>
+                <!-- Setup needed -->
+                <template x-if="state === 'setup'">
+                    <div class="setup-screen">
+                        <div class="setup-card">
+                            <h2>One-time setup</h2>
+                            <p>The remote browser viewer needs port 6080 exposed. This only takes a minute:</p>
+
+                            <div class="step">
+                                <span class="step-num">1</span>
+                                <span>Add this line to your <strong>docker-compose.yml</strong> under <code style="display:inline; padding:2px 6px;">ports:</code></span>
+                            </div>
+                            <code>- "6080:6080"    # Phantom Bridge viewer</code>
+
+                            <div class="step">
+                                <span class="step-num">2</span>
+                                <span>Restart the container:</span>
+                            </div>
+                            <code>docker compose up -d</code>
+
+                            <div class="step">
+                                <span class="step-num">3</span>
+                                <span>If dependencies aren't installed yet, run from Plugins UI or:</span>
+                            </div>
+                            <code>docker exec -it agent-zero python /a0/usr/plugins/phantom_bridge/execute.py</code>
+
+                            <p style="opacity:0.5; font-size:0.8em; margin-top:16px;">
+                                After setup, click the button below. The remote viewer will load with full
+                                keyboard, mouse, and clipboard — no more screenshots.
+                            </p>
+
+                            <button class="retry-btn" @click="
+                                state = 'connecting';
+                                const testUrl = 'http://' + location.hostname + ':' + novncPort + '/vnc.html';
+                                fetch(testUrl, { mode: 'no-cors', signal: AbortSignal.timeout(3000) })
+                                    .then(() => { state = 'connected'; })
+                                    .catch(() => { state = 'setup'; });
+                            ">
+                                Retry Connection
+                            </button>
+                        </div>
                     </div>
                 </template>
 

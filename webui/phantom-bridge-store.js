@@ -9,6 +9,7 @@ export const store = createStore("phantomBridge", {
     running: false,
     novncUrl: "",
     novncReady: false,
+    novncPort: 6080,
     authEntries: [],
     authCount: 0,
     sitemapEntries: [],
@@ -38,6 +39,7 @@ export const store = createStore("phantomBridge", {
             this.running = status.running || false;
             this.novncReady = status.novnc_running || false;
             this.novncUrl = status.novnc_url || "";
+            this.novncPort = status.novnc_port || 6080;
 
             const auth = await api("bridge", { action: "auth_registry" });
             const registry = auth.registry || {};

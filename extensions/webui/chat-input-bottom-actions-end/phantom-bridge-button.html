@@ -45,12 +45,21 @@
     @click="globalThis._phantomBridgeToggle && globalThis._phantomBridgeToggle()"
     title="Open Phantom Bridge — browse inside A0's container"
 >
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="14" height="14" aria-hidden="true">
-        <!-- Ghost body -->
-        <path d="M12 2C8.1 2 5 5.6 5 10c0 2 .7 3.8 2 5.2V21.5l2.5-1.5c.8.3 1.6.5 2.5.5s1.7-.2 2.5-.5L17 21.5V15.2c1.3-1.4 2-3.2 2-5.2 0-4.4-3.1-8-7-8z" opacity="0.9"/>
-        <!-- Eyes (animated via CSS) -->
-        <ellipse class="pb-ghost-eyes" cx="9.5" cy="10.5" rx="1.3" ry="1.1" fill="var(--color-background, #1a1a1a)"/>
-        <ellipse class="pb-ghost-eyes" cx="14.5" cy="10.5" rx="1.3" ry="1.1" fill="var(--color-background, #1a1a1a)"/>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 28" fill="currentColor" width="14" height="16" aria-hidden="true">
+        <!-- Hooded phantom silhouette -->
+        <path d="M12 0L7.5 5.5 6 8.5l-.5 4 1 3.5-1.5 3L4 22l3.5-1L9 24h2.5l.5-1 .5 1H15l1.5-3 3.5 1-1-2.5-1.5-3 1-3.5L18 8.5 16.5 5.5 12 0z"/>
+        <!-- Tattered cloak edges -->
+        <path d="M5 19l-1.5 4.5-.5-1.5L4 19.5z" opacity="0.7"/>
+        <path d="M19 19l1.5 4.5.5-1.5L20 19.5z" opacity="0.7"/>
+        <!-- Slanted eyes (transparent cutouts) -->
+        <path class="pb-ghost-eyes" d="M8.5 10.5l3-1-.6 1.8-2.4-.8z" fill="var(--color-background, #1a1a1a)"/>
+        <path class="pb-ghost-eyes" d="M15.5 10.5l-3-1 .6 1.8 2.4-.8z" fill="var(--color-background, #1a1a1a)"/>
+        <!-- Pixel dissolve fragments -->
+        <rect x="14" y="24.5" width="1.2" height="1.2" opacity="0.5"/>
+        <rect x="16" y="25.5" width="0.9" height="0.9" opacity="0.35"/>
+        <rect x="15.5" y="27" width="0.7" height="0.7" opacity="0.2"/>
+        <rect x="13" y="26" width="0.8" height="0.8" opacity="0.3"/>
+        <rect x="17" y="24" width="0.6" height="0.6" opacity="0.4"/>
     </svg>
     <p>Bridge</p>
 </button>

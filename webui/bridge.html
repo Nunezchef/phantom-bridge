@@ -27,134 +27,198 @@
         .dot { width: 8px; height: 8px; border-radius: 50%; }
         .dot-on { background: #22c55e; box-shadow: 0 0 6px #22c55e66; }
         .dot-off { background: #666; }
-
-        .vnc-frame {
-            flex: 1; border: none; width: 100%;
-            background: #0f0f0f;
+        .mode-tag {
+            font-size: 0.7em; padding: 2px 8px; border-radius: 4px;
+            background: #6366f122; color: #a5b4fc;
         }
 
-        .setup-screen {
-            flex: 1; display: flex; align-items: center; justify-content: center;
-            flex-direction: column; gap: 20px; padding: 40px;
+        .vnc-frame { flex: 1; border: none; width: 100%; background: #0f0f0f; }
+
+        .sc-container {
+            flex: 1; position: relative; overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+            background: #0a0a0a;
         }
-        .setup-card {
-            background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px;
-            padding: 28px; max-width: 520px; width: 100%;
+        .sc-container canvas {
+            max-width: 100%; max-height: 100%;
+            cursor: pointer;
         }
-        .setup-card h2 { font-size: 1.1em; margin-bottom: 12px; }
-        .setup-card p { font-size: 0.85em; opacity: 0.7; line-height: 1.5; margin-bottom: 12px; }
-        .setup-card code {
-            display: block; background: #111; padding: 12px 16px; border-radius: 8px;
-            font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.82em;
-            color: #a5b4fc; margin: 8px 0; overflow-x: auto; white-space: pre;
+        .sc-container.keyboard-active { outline: 2px solid #6366f1; outline-offset: -2px; }
+
+        .kb-hint {
+            position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+            background: #6366f1cc; color: white; padding: 4px 14px; border-radius: 6px;
+            font-size: 0.75em; pointer-events: none; opacity: 0; transition: opacity 0.2s;
         }
-        .setup-card .step {
-            display: flex; gap: 10px; margin: 10px 0;
-            font-size: 0.85em;
-        }
-        .setup-card .step-num {
-            background: #6366f1; color: white; width: 22px; height: 22px;
-            border-radius: 50%; display: flex; align-items: center; justify-content: center;
-            font-size: 0.75em; font-weight: 700; flex-shrink: 0;
-        }
-        .retry-btn {
-            margin-top: 16px; padding: 10px 20px;
-            background: #6366f1; color: white; border: none; border-radius: 8px;
-            cursor: pointer; font-size: 0.85em; font-weight: 500;
-        }
-        .retry-btn:hover { background: #5558e6; }
+        .keyboard-active .kb-hint { opacity: 1; }
 
         .connecting {
             flex: 1; display: flex; align-items: center; justify-content: center;
             font-size: 0.9em; opacity: 0.5;
         }
+        .upgrade-bar {
+            padding: 6px 20px; font-size: 0.72em; opacity: 0.4;
+            text-align: center; background: #151515; border-top: 1px solid #2a2a2a;
+        }
+        .upgrade-bar a { color: #a5b4fc; text-decoration: none; }
     </style>
 </head>
 <body>
-    <div x-data="{ state: 'connecting', novncPort: 6080 }">
-        <template x-if="$store.phantomBridge">
-            <div style="display:contents;" x-init="
-                $store.phantomBridge.onOpen();
-                // Try to connect to noVNC
-                const port = $store.phantomBridge.novncPort || 6080;
-                novncPort = port;
-                const testUrl = 'http://' + location.hostname + ':' + port + '/vnc.html';
-                fetch(testUrl, { mode: 'no-cors', signal: AbortSignal.timeout(3000) })
-                    .then(() => { state = 'connected'; })
-                    .catch(() => { state = 'setup'; });
-            ">
+    <div x-data="bridgeViewer()" x-init="init()">
 
-                <div class="header">
-                    <svg width="20" height="22" viewBox="0 0 24 28" fill="none">
-                        <path d="M12 0L7.5 5.5 6 8.5l-.5 4 1 3.5-1.5 3L4 22l3.5-1L9 24h2.5l.5-1 .5 1H15l1.5-3 3.5 1-1-2.5-1.5-3 1-3.5L18 8.5 16.5 5.5 12 0z" fill="#6366f1"/>
-                        <path d="M8.5 10.5l3-1-.6 1.8-2.4-.8z" fill="white" opacity="0.95"/>
-                        <path d="M15.5 10.5l-3-1 .6 1.8 2.4-.8z" fill="white" opacity="0.95"/>
-                    </svg>
-                    <h1>Phantom Bridge</h1>
-                    <div class="status">
-                        <span class="dot" :class="$store.phantomBridge.running ? 'dot-on' : 'dot-off'"></span>
-                        <span x-text="$store.phantomBridge.running ? 'Bridge Open' : 'Offline'"></span>
-                    </div>
-                </div>
+        <div class="header">
+            <svg width="20" height="22" viewBox="0 0 24 28" fill="none">
+                <path d="M12 0L7.5 5.5 6 8.5l-.5 4 1 3.5-1.5 3L4 22l3.5-1L9 24h2.5l.5-1 .5 1H15l1.5-3 3.5 1-1-2.5-1.5-3 1-3.5L18 8.5 16.5 5.5 12 0z" fill="#6366f1"/>
+                <path d="M8.5 10.5l3-1-.6 1.8-2.4-.8z" fill="white" opacity="0.95"/>
+                <path d="M15.5 10.5l-3-1 .6 1.8 2.4-.8z" fill="white" opacity="0.95"/>
+            </svg>
+            <h1>Phantom Bridge</h1>
+            <template x-if="mode">
+                <span class="mode-tag" x-text="mode === 'vnc' ? 'noVNC' : 'Screencast'"></span>
+            </template>
+            <div class="status">
+                <span class="dot" :class="connected ? 'dot-on' : 'dot-off'"></span>
+                <span x-text="connected ? 'Connected' : 'Connecting...'"></span>
+            </div>
+        </div>
 
-                <!-- Connecting state -->
-                <template x-if="state === 'connecting'">
-                    <div class="connecting">Connecting to remote viewer...</div>
-                </template>
+        <!-- noVNC mode -->
+        <template x-if="mode === 'vnc'">
+            <iframe class="vnc-frame" :src="vncUrl" allow="clipboard-read; clipboard-write"></iframe>
+        </template>
 
-                <!-- Connected — show noVNC iframe -->
-                <template x-if="state === 'connected'">
-                    <iframe class="vnc-frame"
-                            :src="'http://' + location.hostname + ':' + novncPort + '/vnc.html?autoconnect=true&resize=scale&reconnect=true&reconnect_delay=1000'"
-                            allow="clipboard-read; clipboard-write">
-                    </iframe>
-                </template>
-
-                <!-- Setup needed -->
-                <template x-if="state === 'setup'">
-                    <div class="setup-screen">
-                        <div class="setup-card">
-                            <h2>One-time setup</h2>
-                            <p>The remote browser viewer needs port 6080 exposed. This only takes a minute:</p>
-
-                            <div class="step">
-                                <span class="step-num">1</span>
-                                <span>Add this line to your <strong>docker-compose.yml</strong> under <code style="display:inline; padding:2px 6px;">ports:</code></span>
-                            </div>
-                            <code>- "6080:6080"    # Phantom Bridge viewer</code>
-
-                            <div class="step">
-                                <span class="step-num">2</span>
-                                <span>Restart the container:</span>
-                            </div>
-                            <code>docker compose up -d</code>
-
-                            <div class="step">
-                                <span class="step-num">3</span>
-                                <span>If dependencies aren't installed yet, run from Plugins UI or:</span>
-                            </div>
-                            <code>docker exec -it agent-zero python /a0/usr/plugins/phantom_bridge/execute.py</code>
-
-                            <p style="opacity:0.5; font-size:0.8em; margin-top:16px;">
-                                After setup, click the button below. The remote viewer will load with full
-                                keyboard, mouse, and clipboard — no more screenshots.
-                            </p>
-
-                            <button class="retry-btn" @click="
-                                state = 'connecting';
-                                const testUrl = 'http://' + location.hostname + ':' + novncPort + '/vnc.html';
-                                fetch(testUrl, { mode: 'no-cors', signal: AbortSignal.timeout(3000) })
-                                    .then(() => { state = 'connected'; })
-                                    .catch(() => { state = 'setup'; });
-                            ">
-                                Retry Connection
-                            </button>
-                        </div>
-                    </div>
-                </template>
-
+        <!-- Screencast mode -->
+        <template x-if="mode === 'screencast'">
+            <div class="sc-container" :class="{ 'keyboard-active': kbActive }"
+                 tabindex="0"
+                 @click="handleClick($event)"
+                 @focus="kbActive = true"
+                 @blur="kbActive = false"
+                 @keydown.prevent="handleKey($event)"
+                 @keyup.prevent="">
+                <canvas x-ref="canvas" width="1280" height="900"></canvas>
+                <div class="kb-hint">Typing active — Escape to release</div>
             </div>
         </template>
+
+        <!-- Connecting -->
+        <template x-if="!mode">
+            <div class="connecting">Connecting to bridge...</div>
+        </template>
+
+        <!-- Upgrade hint (screencast mode only) -->
+        <template x-if="mode === 'screencast'">
+            <div class="upgrade-bar">
+                Screencast mode (works out of the box).
+                For full native control, add <code>"6080:6080"</code> to docker-compose and restart.
+            </div>
+        </template>
+
     </div>
+
+    <script type="module">
+        import { callJsonApi } from "/js/api.js";
+
+        window.bridgeViewer = function() {
+            return {
+                mode: null,       // 'vnc' | 'screencast'
+                connected: false,
+                vncUrl: '',
+                kbActive: false,
+                _pollId: null,
+
+                async init() {
+                    // Step 1: Check bridge status
+                    const status = await callJsonApi("plugins/phantom_bridge/bridge", { action: "status" });
+                    if (!status.running) {
+                        // Start the bridge
+                        await callJsonApi("plugins/phantom_bridge/bridge", { action: "start" });
+                        await new Promise(r => setTimeout(r, 2500));
+                    }
+
+                    // Step 2: Try noVNC first (requires port 6080 exposed)
+                    const novncPort = status.novnc_port || 6080;
+                    const vncTestUrl = `http://${location.hostname}:${novncPort}/vnc.html`;
+                    try {
+                        await fetch(vncTestUrl, { mode: 'no-cors', signal: AbortSignal.timeout(2000) });
+                        // noVNC is reachable
+                        this.mode = 'vnc';
+                        this.vncUrl = vncTestUrl + '?autoconnect=true&resize=scale&reconnect=true';
+                        this.connected = true;
+                        return;
+                    } catch (e) {
+                        // noVNC not reachable — use screencast
+                    }
+
+                    // Step 3: Fall back to screencast (zero config)
+                    this.mode = 'screencast';
+                    this.connected = true;
+                    await this.$nextTick;
+                    this.startScreencastLoop();
+                },
+
+                startScreencastLoop() {
+                    const canvas = this.$refs.canvas;
+                    if (!canvas) return;
+                    const ctx = canvas.getContext('2d');
+                    const img = new Image();
+
+                    let polling = true;
+                    const poll = async () => {
+                        if (!polling) return;
+                        try {
+                            const data = await callJsonApi("plugins/phantom_bridge/screencast", { action: "frame" });
+                            if (data.ok && data.frame) {
+                                img.onload = () => {
+                                    canvas.width = img.naturalWidth;
+                                    canvas.height = img.naturalHeight;
+                                    ctx.drawImage(img, 0, 0);
+                                };
+                                img.src = "data:image/jpeg;base64," + data.frame;
+                            }
+                        } catch (e) {}
+                        this._pollId = setTimeout(poll, 80);  // ~12fps
+                    };
+                    poll();
+                },
+
+                async handleClick(event) {
+                    const canvas = this.$refs.canvas;
+                    if (!canvas) return;
+                    const rect = canvas.getBoundingClientRect();
+                    const scaleX = canvas.width / rect.width;
+                    const scaleY = canvas.height / rect.height;
+                    const x = Math.round((event.clientX - rect.left) * scaleX);
+                    const y = Math.round((event.clientY - rect.top) * scaleY);
+
+                    this.kbActive = true;
+                    await callJsonApi("plugins/phantom_bridge/screencast", {
+                        action: "click", x, y
+                    });
+                },
+
+                async handleKey(event) {
+                    if (!this.kbActive) return;
+                    if (event.key === 'Escape') { this.kbActive = false; return; }
+                    if ((event.ctrlKey || event.metaKey) && ['t','w','n','l','r'].includes(event.key.toLowerCase())) return;
+
+                    await callJsonApi("plugins/phantom_bridge/screencast", {
+                        action: "key",
+                        key: event.key,
+                        code: event.code,
+                        text: event.key.length === 1 ? event.key : "",
+                        modifiers: {
+                            alt: event.altKey, ctrl: event.ctrlKey,
+                            meta: event.metaKey, shift: event.shiftKey,
+                        },
+                    });
+                },
+
+                destroy() {
+                    if (this._pollId) clearTimeout(this._pollId);
+                }
+            };
+        };
+    </script>
 </body>
 </html>

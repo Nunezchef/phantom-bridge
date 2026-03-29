@@ -64,6 +64,7 @@ class BrowserBridge:
         self._observer_manager = None
         self._vnc_process: subprocess.Popen | None = None  # type: ignore[type-arg]
         self._websockify_process: subprocess.Popen | None = None  # type: ignore[type-arg]
+        self._screencast = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -146,6 +147,16 @@ class BrowserBridge:
         # Start noVNC (x11vnc + websockify) for remote browser control
         self._start_novnc()
 
+        # Start screencast manager (zero-config fallback when noVNC port isn't exposed)
+        try:
+            from screencast import ScreencastManager
+            self._screencast = ScreencastManager(port=self.remote_debug_port)
+            await self._screencast.start()
+            logger.info("browser_bridge: screencast manager started")
+        except Exception as e:
+            logger.warning("browser_bridge: screencast failed to start: %s", e)
+            self._screencast = None
+
         return self.status()
 
     async def stop(self) -> dict[str, Any]:
@@ -163,6 +174,14 @@ class BrowserBridge:
             except Exception as e:
                 logger.warning("browser_bridge: error stopping observers: %s", e)
             self._observer_manager = None
+
+        # Stop screencast
+        if self._screencast:
+            try:
+                await self._screencast.stop()
+            except Exception:
+                pass
+            self._screencast = None
 
         # Stop noVNC processes
         self._stop_novnc()

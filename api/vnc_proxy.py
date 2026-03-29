@@ -71,7 +71,7 @@ class VncProxyHandler(ApiHandler):
             "novnc_installed": novnc_dir is not None,
             "novnc_port": novnc_port,
             # Direct URL for when port IS exposed (simplest path)
-            "direct_url": f"http://localhost:{novnc_port}/vnc.html?autoconnect=true&resize=scale",
+            "direct_url": f"http://localhost:{novnc_port}/vnc.html?autoconnect=true&resize=remote",
             # Fallback: user can access noVNC on the internal port from the container
             "ws_url": f"ws://localhost:{novnc_port}/websockify",
         }

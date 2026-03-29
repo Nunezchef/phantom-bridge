@@ -121,7 +121,7 @@ export const store = createStore("phantomBridge", {
 
     openBridge() {
         const host = location.hostname || "localhost";
-        const url = `http://${host}:${this.novncPort}/vnc.html?autoconnect=true&resize=scale&reconnect=true`;
+        const url = `http://${host}:${this.novncPort}/vnc.html?autoconnect=true&resize=remote&reconnect=true`;
         window.open(url, "phantom-bridge");
     },
 });

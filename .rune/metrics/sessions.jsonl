@@ -41,3 +41,13 @@
 {"id":"s-20260329-165821","date":"2026-03-29","duration_min":876,"tool_calls":99,"tool_distribution":{"unknown":99},"skill_invocations":0,"skills_used":[],"primary_skill":"none"}
 {"id":"s-20260329-172456","date":"2026-03-29","duration_min":1,"tool_calls":2,"tool_distribution":{"unknown":2},"skill_invocations":0,"skills_used":[],"primary_skill":"none"}
 {"id":"s-20260329-172916","date":"2026-03-29","duration_min":5,"tool_calls":2,"tool_distribution":{"unknown":2},"skill_invocations":0,"skills_used":[],"primary_skill":"none"}
+{"id":"s-20260329-173511","date":"2026-03-29","duration_min":11,"tool_calls":4,"tool_distribution":{"unknown":4},"skill_invocations":0,"skills_used":[],"primary_skill":"none"}
+{"id":"s-20260329-191102","date":"2026-03-29","duration_min":1,"tool_calls":1,"tool_distribution":{"unknown":1},"skill_invocations":0,"skills_used":[],"primary_skill":"none"}
+{"id":"s-20260329-191547","date":"2026-03-29","duration_min":5,"tool_calls":2,"tool_distribution":{"unknown":2},"skill_invocations":0,"skills_used":[],"primary_skill":"none"}
+{"id":"s-20260329-191758","date":"2026-03-29","duration_min":7,"tool_calls":2,"tool_distribution":{"unknown":2},"skill_invocations":0,"skills_used":[],"primary_skill":"none"}
+{"id":"s-20260329-192228","date":"2026-03-29","duration_min":12,"tool_calls":2,"tool_distribution":{"unknown":2},"skill_invocations":0,"skills_used":[],"primary_skill":"none"}
+{"id":"s-20260329-193341","date":"2026-03-29","duration_min":23,"tool_calls":2,"tool_distribution":{"unknown":2},"skill_invocations":0,"skills_used":[],"primary_skill":"none"}
+{"id":"s-20260329-193757","date":"2026-03-29","duration_min":27,"tool_calls":2,"tool_distribution":{"unknown":2},"skill_invocations":0,"skills_used":[],"primary_skill":"none"}
+{"id":"s-20260329-233958","date":"2026-03-29","duration_min":269,"tool_calls":3,"tool_distribution":{"unknown":3},"skill_invocations":0,"skills_used":[],"primary_skill":"none"}
+{"id":"s-20260329-234446","date":"2026-03-29","duration_min":274,"tool_calls":6,"tool_distribution":{"unknown":6},"skill_invocations":0,"skills_used":[],"primary_skill":"none"}
+{"id":"s-20260329-234831","date":"2026-03-29","duration_min":278,"tool_calls":9,"tool_distribution":{"unknown":9},"skill_invocations":0,"skills_used":[],"primary_skill":"none"}

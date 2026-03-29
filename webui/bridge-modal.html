@@ -232,7 +232,7 @@
       // noVNC reachable
       mode = "vnc";
       modeTag.textContent = "noVNC";
-      vncFrame.src = vncUrl + "?autoconnect=true&resize=scale&reconnect=true&reconnect_delay=1000";
+      vncFrame.src = vncUrl + "?autoconnect=true&resize=remote&reconnect=true&reconnect_delay=1000";
       vncFrame.style.display = "block";
       loadingEl.style.display = "none";
       return;
@@ -301,7 +301,7 @@
   // ── Popout ──
   btnPopout.addEventListener("click", function(e) {
     e.stopPropagation();
-    var url = "http://" + location.hostname + ":" + novncPort + "/vnc.html?autoconnect=true&resize=scale&reconnect=true";
+    var url = "http://" + location.hostname + ":" + novncPort + "/vnc.html?autoconnect=true&resize=remote&reconnect=true";
     window.open(url, "phantom-bridge");
   });
 

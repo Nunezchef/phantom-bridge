@@ -79,6 +79,27 @@ class BrowserBridge:
         if self.is_running():
             return self.status()
 
+        # Check if Chrome is already running on our debug port (started externally)
+        if self._detect_existing_chrome():
+            _bridge = self
+            self._started_at = time.time()
+            # Start supporting services on top of the existing Chrome
+            self._start_novnc()
+            try:
+                from screencast import ScreencastManager
+                self._screencast = ScreencastManager(port=self.remote_debug_port)
+                await self._screencast.start()
+            except Exception:
+                pass
+            try:
+                from observer.manager import ObserverManager
+                data_dir = self.profile_dir.parent
+                self._observer_manager = ObserverManager(port=self.remote_debug_port, data_dir=data_dir)
+                await self._observer_manager.start()
+            except Exception:
+                pass
+            return self.status()
+
         # Ensure profile directory exists and clean stale locks
         self.profile_dir.mkdir(parents=True, exist_ok=True)
         for lock_file in ["SingletonLock", "SingletonCookie", "SingletonSocket"]:
@@ -145,6 +166,9 @@ class BrowserBridge:
 
         # Wait for the debug port to be ready
         await self._wait_for_devtools()
+
+        # Force Chrome window to fill the entire Xvfb display
+        self._maximize_window(env)
 
         # Start observer layers (auth registry, sitemap learner, playbook recorder)
         try:
@@ -221,9 +245,13 @@ class BrowserBridge:
 
     def is_running(self) -> bool:
         """Check if the Chromium process is still alive."""
-        if self._process is None:
-            return False
-        return self._process.poll() is None
+        # Check our managed process
+        if self._process is not None and self._process.poll() is None:
+            return True
+        # Check if we adopted an external Chrome (no subprocess but bridge is set)
+        if self._process is None and self._started_at is not None:
+            return self._detect_existing_chrome()
+        return False
 
     def status(self) -> dict[str, Any]:
         """Return current bridge status."""
@@ -285,6 +313,42 @@ class BrowserBridge:
             shutil.rmtree(self.profile_dir)
             self.profile_dir.mkdir(parents=True, exist_ok=True)
             logger.info("browser_bridge: profile cleared at %s", self.profile_dir)
+
+    def _maximize_window(self, env: dict | None = None) -> None:
+        """Force the Chrome window to fill the Xvfb display using xdotool."""
+        xdotool = shutil.which("xdotool")
+        if not xdotool:
+            return
+        run_env = env or os.environ.copy()
+        if self._display:
+            run_env["DISPLAY"] = self._display
+        try:
+            # Wait for the window to appear, then resize it
+            subprocess.run(
+                [xdotool, "search", "--sync", "--onlyvisible", "--name", "", "windowsize", "--sync", "%@",
+                 str(self.window_width), str(self.window_height)],
+                env=run_env, timeout=5, capture_output=True,
+            )
+            subprocess.run(
+                [xdotool, "search", "--onlyvisible", "--name", "", "windowmove", "%@", "0", "0"],
+                env=run_env, timeout=3, capture_output=True,
+            )
+            logger.info("browser_bridge: window resized to %dx%d", self.window_width, self.window_height)
+        except Exception as e:
+            logger.debug("browser_bridge: xdotool resize failed (non-critical): %s", e)
+
+    def _detect_existing_chrome(self) -> bool:
+        """Check if Chrome is already running with CDP on our port."""
+        try:
+            import urllib.request
+            url = f"http://127.0.0.1:{self.remote_debug_port}/json/version"
+            with urllib.request.urlopen(url, timeout=2) as resp:
+                if resp.status == 200:
+                    logger.info("browser_bridge: detected existing Chrome on port %d", self.remote_debug_port)
+                    return True
+        except Exception:
+            pass
+        return False
 
     # ------------------------------------------------------------------
     # Display (Xvfb)

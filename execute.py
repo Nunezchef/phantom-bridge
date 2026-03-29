@@ -24,7 +24,7 @@ def main():
     else:
         print("Installing x11vnc and noVNC...")
         result = subprocess.run(
-            ["apt-get", "install", "-y", "--no-install-recommends", "x11vnc", "novnc"],
+            ["apt-get", "install", "-y", "--no-install-recommends", "x11vnc", "novnc", "xvfb", "xdotool"],
             text=True,
             capture_output=True,
         )

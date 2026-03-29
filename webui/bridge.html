@@ -62,6 +62,10 @@
             display: flex; align-items: center; justify-content: center;
             background: #1a1a1a; font-size: 0.9em; opacity: 0.5;
         }
+        .browser-frame.keyboard-active {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 2px #6366f133;
+        }
 
         .pages-bar {
             display: flex; gap: 4px; padding: 8px 24px;
@@ -81,6 +85,12 @@
             padding: 12px 24px; font-size: 0.75em; opacity: 0.4;
             text-align: center;
         }
+        .keyboard-hint {
+            padding: 6px 24px; font-size: 0.75em;
+            background: #6366f111; color: #a5b4fc;
+            text-align: center; display: none;
+        }
+        .keyboard-hint.visible { display: block; }
     </style>
 </head>
 <body>
@@ -100,22 +110,29 @@
     <div class="pages-bar" id="pagesBar"></div>
 
     <div class="toolbar">
-        <button class="nav-btn secondary" onclick="goBack()" title="Back">←</button>
-        <button class="nav-btn secondary" onclick="refresh()" title="Refresh">↻</button>
+        <button class="nav-btn secondary" onclick="goBack()" title="Back">&#8592;</button>
+        <button class="nav-btn secondary" onclick="doReload()" title="Refresh">&#8635;</button>
         <input class="url-bar" id="urlBar" placeholder="Enter URL and press Enter" onkeydown="if(event.key==='Enter')navigate()">
         <button class="nav-btn" onclick="navigate()">Go</button>
     </div>
 
-    <div class="browser-frame" id="browserFrame" onclick="handleClick(event)">
+    <div class="keyboard-hint" id="keyboardHint">
+        Keyboard active — typing goes to the remote browser. Click outside the frame or press Escape to release.
+    </div>
+
+    <div class="browser-frame" id="browserFrame" tabindex="0"
+         onclick="handleClick(event)"
+         onfocus="activateKeyboard()"
+         onblur="deactivateKeyboard()">
         <div class="loading" id="loadingOverlay">
             <span>Starting bridge...</span>
         </div>
-        <img id="screenshot" style="display:none;" alt="Browser view">
+        <img id="screenshot" style="display:none;" alt="Browser view" draggable="false">
     </div>
 
     <div class="info-bar">
         Phantom Bridge — browsing through A0's internal Chromium. All sessions persist in the container.
-        <br>Click anywhere on the screenshot to interact. The observer is watching and learning.
+        <br>Click the screenshot to interact. Click again to enable keyboard input.
     </div>
 
     <script type="module">
@@ -125,6 +142,7 @@
         let pages = [];
         let refreshInterval = null;
         let screenshotInterval = null;
+        let keyboardActive = false;
 
         async function api(action, params = {}) {
             return callJsonApi("plugins/phantom_bridge/proxy", { action, ...params });
@@ -134,31 +152,32 @@
             return callJsonApi("plugins/phantom_bridge/bridge", { action, ...params });
         }
 
-        // Expose functions to onclick handlers
+        // Expose functions to inline handlers
         window.navigate = navigate;
         window.selectPage = selectPage;
         window.goBack = goBack;
-        window.refresh = refresh;
+        window.doReload = doReload;
         window.handleClick = handleClick;
+        window.activateKeyboard = activateKeyboard;
+        window.deactivateKeyboard = deactivateKeyboard;
 
         async function init() {
-            // Check if bridge is running
             const status = await bridgeApi("status");
             if (!status.running) {
-                // Start it
                 document.getElementById("loadingOverlay").querySelector("span").textContent = "Starting bridge...";
                 await bridgeApi("start");
-                // Wait a moment for Chromium
                 await new Promise(r => setTimeout(r, 2000));
             }
 
             await refreshPages();
             updateStatus(true);
 
-            // Poll for screenshots
             screenshotInterval = setInterval(takeScreenshot, 1500);
-            // Poll for page list
             refreshInterval = setInterval(refreshPages, 5000);
+
+            // Keyboard event forwarding
+            document.getElementById("browserFrame").addEventListener("keydown", handleKeyDown);
+            document.getElementById("browserFrame").addEventListener("keyup", handleKeyUp);
         }
 
         async function refreshPages() {
@@ -171,7 +190,6 @@
             pages = data.pages.filter(p => p.type === "page");
             updateStatus(true);
 
-            // Render tabs
             const bar = document.getElementById("pagesBar");
             bar.innerHTML = pages.map(p =>
                 `<div class="tab ${p.id === currentPageId ? 'active' : ''}"
@@ -179,12 +197,10 @@
                      title="${p.url}">${p.title || p.url || 'New Tab'}</div>`
             ).join("");
 
-            // Auto-select first page
             if (!currentPageId && pages.length > 0) {
                 selectPage(pages[0].id);
             }
 
-            // Update URL bar
             const activePage = pages.find(p => p.id === currentPageId);
             if (activePage) {
                 document.getElementById("urlBar").value = activePage.url || "";
@@ -213,7 +229,6 @@
             const url = document.getElementById("urlBar").value.trim();
             if (!url) return;
 
-            // Add protocol if missing
             let fullUrl = url;
             if (!url.startsWith("http://") && !url.startsWith("https://")) {
                 fullUrl = "https://" + url;
@@ -231,44 +246,132 @@
             }
         }
 
+        async function doReload() {
+            if (!currentPageId) return;
+            await api("reload", { page_id: currentPageId });
+            setTimeout(takeScreenshot, 1000);
+            setTimeout(refreshPages, 1500);
+        }
+
+        async function goBack() {
+            if (!currentPageId) return;
+            await api("go_back", { page_id: currentPageId });
+            setTimeout(takeScreenshot, 1000);
+            setTimeout(refreshPages, 1500);
+        }
+
         async function handleClick(event) {
             if (!currentPageId) return;
 
             const img = document.getElementById("screenshot");
             if (!img.naturalWidth) return;
 
-            // Calculate click position relative to the actual browser viewport
+            // Don't process clicks on the loading overlay
+            if (event.target.id === "loadingOverlay") return;
+
             const rect = img.getBoundingClientRect();
-            const scaleX = 1280 / rect.width;  // default viewport width
-            const scaleY = 900 / rect.height;  // default viewport height
+            const scaleX = img.naturalWidth / rect.width;
+            const scaleY = img.naturalHeight / rect.height;
 
             const x = Math.round((event.clientX - rect.left) * scaleX);
             const y = Math.round((event.clientY - rect.top) * scaleY);
 
-            // Send click via CDP
+            // Clamp to viewport
+            if (x < 0 || y < 0 || x > img.naturalWidth || y > img.naturalHeight) return;
+
             try {
-                const ws = pages.find(p => p.id === currentPageId);
-                if (!ws) return;
-
-                // Use the proxy to dispatch mouse events
-                await callJsonApi("plugins/phantom_bridge/click", { page_id: currentPageId, x, y });
-
-                // Refresh after click
-                setTimeout(takeScreenshot, 500);
-                setTimeout(refreshPages, 1000);
+                await callJsonApi("plugins/phantom_bridge/click", {
+                    page_id: currentPageId, x, y
+                });
+                // Quick screenshot to show result
+                setTimeout(takeScreenshot, 300);
+                setTimeout(takeScreenshot, 1000);
+                setTimeout(refreshPages, 1500);
             } catch (e) {
                 console.error("Click failed:", e);
             }
+
+            // Activate keyboard on click
+            activateKeyboard();
         }
 
-        function goBack() {
-            // Could implement via CDP Page.goBack but for now just refresh
-            refresh();
+        // ---------------------------------------------------------------
+        // Keyboard forwarding
+        // ---------------------------------------------------------------
+
+        function activateKeyboard() {
+            keyboardActive = true;
+            document.getElementById("browserFrame").classList.add("keyboard-active");
+            document.getElementById("keyboardHint").classList.add("visible");
         }
 
-        async function refresh() {
-            await takeScreenshot();
-            await refreshPages();
+        function deactivateKeyboard() {
+            keyboardActive = false;
+            document.getElementById("browserFrame").classList.remove("keyboard-active");
+            document.getElementById("keyboardHint").classList.remove("visible");
+        }
+
+        async function handleKeyDown(event) {
+            if (!keyboardActive || !currentPageId) return;
+
+            // Let Escape release keyboard focus
+            if (event.key === "Escape") {
+                deactivateKeyboard();
+                document.getElementById("browserFrame").blur();
+                return;
+            }
+
+            // Don't intercept browser shortcuts (Ctrl+T, Ctrl+W, etc.)
+            if ((event.ctrlKey || event.metaKey) && ["t", "w", "n", "l", "r"].includes(event.key.toLowerCase())) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const action = event.key.length === 1 ? "type_text" : "key";
+
+            try {
+                if (action === "type_text") {
+                    await callJsonApi("plugins/phantom_bridge/keyboard", {
+                        page_id: currentPageId,
+                        action: "type_text",
+                        text: event.key,
+                        modifiers: {
+                            alt: event.altKey,
+                            ctrl: event.ctrlKey,
+                            meta: event.metaKey,
+                            shift: event.shiftKey,
+                        },
+                    });
+                } else {
+                    await callJsonApi("plugins/phantom_bridge/keyboard", {
+                        page_id: currentPageId,
+                        action: "key",
+                        key: event.key,
+                        code: event.code,
+                        modifiers: {
+                            alt: event.altKey,
+                            ctrl: event.ctrlKey,
+                            meta: event.metaKey,
+                            shift: event.shiftKey,
+                        },
+                    });
+                }
+                // Update screenshot after typing
+                setTimeout(takeScreenshot, 300);
+            } catch (e) {
+                console.error("Key event failed:", e);
+            }
+        }
+
+        function handleKeyUp(event) {
+            if (!keyboardActive || !currentPageId) return;
+            if (event.key === "Escape") return;
+            if ((event.ctrlKey || event.metaKey) && ["t", "w", "n", "l", "r"].includes(event.key.toLowerCase())) return;
+            event.preventDefault();
+            event.stopPropagation();
+            // keyUp is sent by the keyboard API handler as part of the key sequence
         }
 
         function updateStatus(connected) {
@@ -278,7 +381,6 @@
             text.textContent = connected ? `${pages.length} page(s)` : "Disconnected";
         }
 
-        // Start
         init();
     </script>
 </body>

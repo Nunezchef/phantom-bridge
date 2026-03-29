@@ -6,10 +6,10 @@ Major rebuild: replace screenshot viewer with noVNC, add A0 intelligence layer (
 ## Phases
 | # | Name | Status | Plan File | Summary |
 |---|------|--------|-----------|---------|
-| 1 | Clean + noVNC | ⬚ Pending | plan-bridge-rebuild-phase1.md | Delete dead code, fix imports, add noVNC launcher + viewer, execute.py |
-| 2 | A0 Intelligence | ⬚ Pending | plan-bridge-rebuild-phase2.md | Rewrite system prompt (additive), auto-suggest on auth failure, playbook awareness |
-| 3 | Pattern Learning | ⬚ Pending | plan-bridge-rebuild-phase3.md | Wire observer → playbook → A0 replay. "Show once, A0 does it forever" |
-| 4 | Polish | ⬚ Pending | plan-bridge-rebuild-phase4.md | config.html settings UI, README, proper plugin.yaml, A0 review checklist pass |
+| 1 | Clean + noVNC | ✅ Done | plan-bridge-rebuild-phase1.md | Delete dead code, fix imports, add noVNC launcher + viewer, execute.py |
+| 2 | A0 Intelligence | ✅ Done | plan-bridge-rebuild-phase2.md | Rewrite system prompt (additive), auto-suggest on auth failure, playbook awareness |
+| 3 | Pattern Learning | ✅ Done | (already wired) | Observer → playbook → system prompt → replay. End-to-end pipeline complete. |
+| 4 | Polish | ✅ Done | plan-bridge-rebuild-phase4.md | README, plugin.yaml v1.0.0, CLAUDE.md, clean file structure |
 
 ## Key Decisions
 - **noVNC via apt** (x11vnc + novnc packages): stable, single port 6080, iframe-embeddable

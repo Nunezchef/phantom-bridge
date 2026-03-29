@@ -76,16 +76,7 @@ class ProxyHandler(ApiHandler):
         try:
             import websockets
 
-            # Get the WebSocket URL for this page
-            with urllib.request.urlopen(f"{CDP_BASE}/json", timeout=3) as resp:
-                pages = json.loads(resp.read().decode())
-
-            ws_url = None
-            for page in pages:
-                if page.get("id") == page_id:
-                    ws_url = page.get("webSocketDebuggerUrl")
-                    break
-
+            ws_url = self._find_ws_url(page_id)
             if not ws_url:
                 return {"ok": False, "error": f"Page {page_id} not found"}
 
@@ -96,7 +87,7 @@ class ProxyHandler(ApiHandler):
                     "method": "Page.captureScreenshot",
                     "params": {"format": "jpeg", "quality": 70}
                 }))
-                result = json.loads(await ws.recv())
+                result = await self._recv_response(ws, 1)
                 if "result" in result and "data" in result["result"]:
                     return {
                         "ok": True,
@@ -116,15 +107,7 @@ class ProxyHandler(ApiHandler):
         try:
             import websockets
 
-            with urllib.request.urlopen(f"{CDP_BASE}/json", timeout=3) as resp:
-                pages = json.loads(resp.read().decode())
-
-            ws_url = None
-            for page in pages:
-                if page.get("id") == page_id:
-                    ws_url = page.get("webSocketDebuggerUrl")
-                    break
-
+            ws_url = self._find_ws_url(page_id)
             if not ws_url:
                 return {"ok": False, "error": f"Page {page_id} not found"}
 
@@ -134,89 +117,86 @@ class ProxyHandler(ApiHandler):
                     "method": "Page.navigate",
                     "params": {"url": url}
                 }))
-                result = json.loads(await ws.recv())
+                result = await self._recv_response(ws, 1)
                 return {"ok": True, "result": result.get("result", {})}
 
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
     async def _reload(self, page_id: str) -> dict:
-        """Reload the current page via CDP."""
+        """Reload the current page via JS evaluation."""
         if not page_id:
             return {"ok": False, "error": "page_id required"}
 
         try:
             import websockets
 
-            with urllib.request.urlopen(f"{CDP_BASE}/json", timeout=3) as resp:
-                pages = json.loads(resp.read().decode())
-
-            ws_url = None
-            for page in pages:
-                if page.get("id") == page_id:
-                    ws_url = page.get("webSocketDebuggerUrl")
-                    break
-
+            ws_url = self._find_ws_url(page_id)
             if not ws_url:
                 return {"ok": False, "error": f"Page {page_id} not found"}
 
             async with websockets.connect(ws_url) as ws:
                 await ws.send(json.dumps({
                     "id": 1,
-                    "method": "Page.reload",
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": "window.location.reload()"}
                 }))
-                await ws.recv()
+                # Read responses until we get our command response (skip events)
+                result = await self._recv_response(ws, 1)
                 return {"ok": True}
 
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
     async def _go_back(self, page_id: str) -> dict:
-        """Navigate back in history via CDP."""
+        """Navigate back in history via JS evaluation."""
         if not page_id:
             return {"ok": False, "error": "page_id required"}
 
         try:
             import websockets
 
-            with urllib.request.urlopen(f"{CDP_BASE}/json", timeout=3) as resp:
-                pages = json.loads(resp.read().decode())
-
-            ws_url = None
-            for page in pages:
-                if page.get("id") == page_id:
-                    ws_url = page.get("webSocketDebuggerUrl")
-                    break
-
+            ws_url = self._find_ws_url(page_id)
             if not ws_url:
                 return {"ok": False, "error": f"Page {page_id} not found"}
 
             async with websockets.connect(ws_url) as ws:
-                # Get navigation history
                 await ws.send(json.dumps({
                     "id": 1,
-                    "method": "Page.getNavigationHistory",
+                    "method": "Runtime.evaluate",
+                    "params": {"expression": "window.history.back()"}
                 }))
-                result = json.loads(await ws.recv())
-                history = result.get("result", {})
-                current_index = history.get("currentIndex", 0)
-
-                if current_index <= 0:
-                    return {"ok": True, "message": "Already at first page"}
-
-                # Navigate to previous entry
-                entries = history.get("entries", [])
-                prev_entry = entries[current_index - 1]
-                await ws.send(json.dumps({
-                    "id": 2,
-                    "method": "Page.navigateToHistoryEntry",
-                    "params": {"entryId": prev_entry["id"]}
-                }))
-                await ws.recv()
+                result = await self._recv_response(ws, 1)
                 return {"ok": True}
 
         except Exception as e:
             return {"ok": False, "error": str(e)}
+
+    def _find_ws_url(self, page_id: str) -> str | None:
+        """Look up the WebSocket debugger URL for a page."""
+        with urllib.request.urlopen(f"{CDP_BASE}/json", timeout=3) as resp:
+            pages = json.loads(resp.read().decode())
+        for page in pages:
+            if page.get("id") == page_id:
+                return page.get("webSocketDebuggerUrl")
+        return None
+
+    @staticmethod
+    async def _recv_response(ws, msg_id: int, timeout: float = 5.0):
+        """Read from WebSocket until we get the response matching msg_id.
+        Skips CDP event notifications that arrive before the response."""
+        import asyncio
+        deadline = asyncio.get_event_loop().time() + timeout
+        while asyncio.get_event_loop().time() < deadline:
+            try:
+                raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
+                msg = json.loads(raw)
+                if msg.get("id") == msg_id:
+                    return msg
+                # Otherwise it's a CDP event — skip it
+            except asyncio.TimeoutError:
+                break
+        return {}
 
     async def _close_tab(self, page_id: str) -> dict:
         """Close a browser tab via CDP."""

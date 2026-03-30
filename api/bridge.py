@@ -104,22 +104,17 @@ class BridgeHandler(ApiHandler):
         return {"ok": True, "playbooks": result}
 
     def _get_cookies(self) -> dict:
-        """Return live cookie counts per domain from Chrome via CDP."""
-        # Try to read from cached cookies file (updated by export_cookies)
-        cookies_file = _plugin_root / "data" / "cookies.json"
-        if cookies_file.exists():
-            try:
-                data = json.loads(cookies_file.read_text())
-                summary = {}
-                for domain, cookies in data.items():
-                    summary[domain] = {"count": len(cookies)}
-                return {"ok": True, "cookies": summary, "total_domains": len(data)}
-            except Exception:
-                pass
-        return {"ok": True, "cookies": {}, "total_domains": 0}
+        """Return cookie counts per domain from encrypted per-domain files."""
+        from usr.plugins.phantom_bridge.cookie_crypt import get_cookie_summary
+        summary = get_cookie_summary()
+        return {
+            "ok": True,
+            "cookies": {d: {"count": info["count"]} for d, info in summary.items()},
+            "total_domains": len(summary),
+        }
 
     async def _export_cookies(self) -> dict:
-        """Fetch all cookies from Chrome via CDP and save to data/cookies.json."""
+        """Fetch all cookies from Chrome via CDP and save as encrypted per-domain files."""
         try:
             import asyncio
             import websockets
@@ -144,7 +139,7 @@ class BridgeHandler(ApiHandler):
                 listener.cancel()
                 cookies = responses.get(1, {}).get("result", {}).get("cookies", [])
 
-            by_domain = {}
+            by_domain: dict[str, list[dict]] = {}
             for c in cookies:
                 d = c.get("domain", "").lstrip(".")
                 if d:
@@ -159,9 +154,9 @@ class BridgeHandler(ApiHandler):
             # Only save if we actually got cookies — don't overwrite
             # existing data when Chrome just restarted and cookies aren't loaded yet
             if by_domain:
-                cookies_file = _plugin_root / "data" / "cookies.json"
-                (_plugin_root / "data").mkdir(parents=True, exist_ok=True)
-                cookies_file.write_text(json.dumps(by_domain, indent=2), encoding="utf-8")
+                from usr.plugins.phantom_bridge.cookie_crypt import save_domain_cookies
+                for domain, domain_cookies in by_domain.items():
+                    save_domain_cookies(domain, domain_cookies)
 
             return {"ok": True, "domains": len(by_domain), "total": sum(len(v) for v in by_domain.values())}
         except Exception as e:
@@ -172,6 +167,9 @@ class BridgeHandler(ApiHandler):
         try:
             import asyncio
             import websockets
+            from usr.plugins.phantom_bridge.cookie_crypt import (
+                delete_domain_cookies, delete_all_cookies,
+            )
 
             url = "http://127.0.0.1:9222/json"
             with urllib.request.urlopen(url, timeout=3) as resp:
@@ -237,22 +235,12 @@ class BridgeHandler(ApiHandler):
                 await asyncio.sleep(0.5)
                 listener.cancel()
 
-            # Clear the exported cookies file
-            cookies_file = _plugin_root / "data" / "cookies.json"
+            # Clear encrypted cookie files on disk
             if domain:
-                # Remove just this domain from the export
-                if cookies_file.exists():
-                    try:
-                        data = json.loads(cookies_file.read_text())
-                        data.pop(domain, None)
-                        data.pop("." + domain.lstrip("."), None)
-                        cookies_file.write_text(json.dumps(data, indent=2))
-                    except Exception:
-                        pass
+                delete_domain_cookies(domain)
                 return {"ok": True, "deleted": domain}
             else:
-                if cookies_file.exists():
-                    cookies_file.write_text("{}")
+                delete_all_cookies()
                 # Also clear auth registry
                 auth_file = _plugin_root / "data" / "auth_registry.json"
                 if auth_file.exists():

@@ -10,7 +10,7 @@
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
   <a href="https://github.com/frdel/agent-zero"><img src="https://img.shields.io/badge/Agent_Zero-plugin-orange.svg" alt="A0 Compatible"></a>
-  <a href="#"><img src="https://img.shields.io/badge/version-1.0.0-purple.svg" alt="Version 1.0.0"></a>
+  <a href="#"><img src="https://img.shields.io/badge/version-1.1.0-purple.svg" alt="Version 1.1.0"></a>
 </p>
 
 <p align="center">
@@ -37,7 +37,7 @@ Phantom Bridge flips the model. Instead of moving credentials *into* the contain
 ```
 1. Tell A0: "open the browser bridge"
 2. A remote browser viewer appears — you're looking at A0's Chromium
-3. Log into anything. Google, NotebookLM, X, Threads, Toast, OpenTable.
+3. Log into anything. Google, NotebookLM, X, GitHub, AWS, Jira.
 4. Close the bridge. A0's browser agent inherits every session.
 5. Show A0 a workflow once — it replays it forever.
 ```
@@ -67,23 +67,20 @@ Bridge Chromium ──→ data/profile/ ←── A0's browser_agent
 
 ### Cookie Management
 
-All cookies are exported to `data/cookies.json` in a clean, readable format — grouped by domain with full metadata:
+Cookies are stored as **encrypted per-domain files** at `data/cookies/<domain>.json`. Cookie values are encrypted at rest using [Fernet](https://cryptography.io/en/latest/fernet/) symmetric encryption — names and metadata stay in plaintext so A0 can inspect structure without decrypting:
 
 ```json
-{
-  "google.com": [
-    { "name": "SID", "value": "...", "domain": ".google.com", "httpOnly": true, "secure": true, "expires": 1756684800 },
-    { "name": "HSID", "value": "...", "domain": ".google.com", "httpOnly": true, "secure": false }
-  ],
-  "x.com": [
-    { "name": "auth_token", "value": "...", "domain": ".x.com", "httpOnly": true, "secure": true }
-  ]
-}
+[
+  { "name": "SID", "encrypted_value": "gAAAAABn...", "domain": ".google.com", "httpOnly": true, "secure": true, "expires": 1756684800 },
+  { "name": "HSID", "encrypted_value": "gAAAAABn...", "domain": ".google.com", "httpOnly": true, "secure": false }
+]
 ```
 
+- **Encrypted at rest** — session tokens are never stored in plaintext on disk
+- **Per-domain files** — A0 only loads cookies for the domain it needs (cheaper token calls)
+- **On-demand decryption** — A0 uses the `bridge_decrypt_cookies` tool to get plaintext cookies in memory when needed for HTTP requests
 - Live cookie counts per domain in the sidebar panel
 - **Delete All** button to wipe every session instantly
-- A0 can read `cookies.json` for any purpose — HTTP clients, API calls, automation scripts
 
 ### Intelligent Observer
 
@@ -221,6 +218,7 @@ Or click the phantom icon in A0's chat bar.
 | `bridge_sitemap` | Learned URL patterns per domain |
 | `bridge_record` | Start/stop recording a workflow |
 | `bridge_replay` | Replay a saved workflow autonomously |
+| `bridge_decrypt_cookies` | Decrypt stored cookies for a domain (for HTTP requests) |
 
 ---
 
@@ -247,7 +245,11 @@ All persistent data lives in `data/` (survives container restarts when `/usr` is
 ```
 data/
 ├── profile/              # Chromium user data (cookies, localStorage, sessions)
-├── cookies.json          # Exported cookies — grouped by domain, readable JSON
+├── .cookie_key           # Fernet symmetric encryption key (auto-generated)
+├── cookies/              # Per-domain encrypted cookie files
+│   ├── google.com.json
+│   ├── github.com.json
+│   └── ...
 ├── auth_registry.json    # Authenticated domains with expiry metadata
 ├── sitemaps/             # Learned URL patterns per domain
 └── playbooks/            # Recorded workflows for autonomous replay
@@ -255,9 +257,10 @@ data/
 
 ### Security
 
-- **Cookies are sensitive data.** The `data/` directory contains session tokens. Treat it like you would a password vault.
+- **Cookie values are encrypted at rest** using Fernet symmetric encryption. The key is auto-generated at `data/.cookie_key` on first export. Cookie names and metadata remain in plaintext for structure inspection.
+- **On-demand decryption only.** Plaintext cookie values are never written to disk — the `bridge_decrypt_cookies` tool returns them in memory.
 - **Port 6080 gives full browser control.** Only expose on trusted networks.
-- **The profile directory is gitignored.** Never commit it.
+- **The entire `data/` directory is gitignored.** Never commit it.
 - All cookie data stays inside the container. Nothing is sent externally.
 
 ---
@@ -270,10 +273,10 @@ data/
 | **NotebookLM** | Query knowledge bases, generate content |
 | **X / Twitter** | Post content, monitor mentions, engage |
 | **Threads** | Publish posts, read feeds |
-| **Toast POS** | Pull sales data, sync menus, export reports |
-| **OpenTable** | Manage reservations, respond to reviews |
-| **DoorDash / Uber Eats** | Accept orders, update menus |
-| **Bank portals** | Read-only financial data for reporting |
+| **GitHub** | Manage repos, review PRs, triage issues |
+| **AWS Console** | Monitor resources, check billing, manage services |
+| **Jira / Linear** | Track sprints, update tickets, manage backlogs |
+| **Vercel / Netlify** | Deploy previews, check build logs, manage domains |
 | **Any web app** | If you can log into it, A0 can use it |
 
 ---
@@ -295,7 +298,8 @@ data/
 phantom_bridge/
 ├── plugin.yaml            # A0 plugin manifest
 ├── bridge.py              # Core BrowserBridge singleton — Chromium + noVNC lifecycle
-├── screencast.py           # CDP screencast manager (zero-config fallback)
+├── cookie_crypt.py        # Fernet encryption for cookie values at rest
+├── screencast.py          # CDP screencast manager (zero-config fallback)
 ├── execute.py             # Dependency installer
 ├── hooks.py               # A0 framework lifecycle hooks
 ├── default_config.yaml    # Plugin defaults

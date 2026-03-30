@@ -77,14 +77,22 @@ authenticated cookies. To use these sessions:
 1. **browser_use / browser_agent**: Connect to the bridge's Chrome via CDP
    instead of launching a new browser. Use cdp_url="http://127.0.0.1:9222"
    or connect_over_cdp. This gives you access to all cookies from the bridge.
-2. **HTTP requests**: Read cookies from `data/cookies.json` in the plugin
-   directory — they are exported in JSON format grouped by domain.
+2. **HTTP requests**: Cookies are stored **encrypted** in per-domain files at
+   `data/cookies/<domain>.json`. Use the **bridge_decrypt_cookies** tool to
+   decrypt cookies for a specific domain on demand. The tool returns a
+   ready-to-use Cookie header string. Never write decrypted cookies to disk.
 3. **CLI tools** (like nlm): Use --cdp-url http://127.0.0.1:9222 to
    authenticate via the bridge's running Chrome session.
 
 DO NOT launch a fresh browser when authenticated sessions exist in the bridge.
 Always check bridge_auth first, and if the domain is authenticated, connect
 to the bridge's Chrome on port 9222 instead.
+
+### Cookie encryption
+Cookie values are encrypted at rest using Fernet symmetric encryption.
+The key is stored at `data/.cookie_key` (auto-generated on first export).
+Cookie names and metadata are in plaintext — only values are encrypted.
+To read decrypted cookies, always use the **bridge_decrypt_cookies** tool.
 
 ### Tools
 - **browser_bridge_open** — Start the bridge (launches remote viewer)
@@ -95,6 +103,7 @@ to the bridge's Chrome on port 9222 instead.
 - **bridge_sitemap** — Learned URL patterns per domain
 - **bridge_record** — Start/stop recording a replayable workflow
 - **bridge_replay** — Replay a saved workflow autonomously
+- **bridge_decrypt_cookies** — Decrypt stored cookies for a domain (for HTTP requests)
 """)
 
         # ----- Live auth state -----

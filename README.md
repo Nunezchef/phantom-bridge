@@ -299,7 +299,6 @@ phantom_bridge/
 ├── execute.py             # Dependency installer
 ├── hooks.py               # A0 framework lifecycle hooks
 ├── default_config.yaml    # Plugin defaults
-├── launch_chrome.sh       # Process isolation helper
 ├── observer/              # Three-tier CDP observation system
 │   ├── cdp_client.py      # WebSocket client with pub/sub + auto-reconnect
 │   ├── auth_registry.py   # L1: cookie-based auth detection

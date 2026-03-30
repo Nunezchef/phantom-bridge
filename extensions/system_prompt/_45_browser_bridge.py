@@ -68,9 +68,23 @@ session afterward."
 - Learned sitemaps: `data/sitemaps/` (per-domain URL patterns)
 - Recorded playbooks: `data/playbooks/` (replayable workflows)
 
-Sessions persist across container restarts. The profile directory is shared
-with your browser_agent tool — any cookies set via the bridge are available
-to you immediately.
+Sessions persist across container restarts.
+
+### CRITICAL: Using authenticated sessions
+When the bridge is running, Chrome is available on CDP port 9222 with all
+authenticated cookies. To use these sessions:
+
+1. **browser_use / browser_agent**: Connect to the bridge's Chrome via CDP
+   instead of launching a new browser. Use cdp_url="http://127.0.0.1:9222"
+   or connect_over_cdp. This gives you access to all cookies from the bridge.
+2. **HTTP requests**: Read cookies from `data/cookies.json` in the plugin
+   directory — they are exported in JSON format grouped by domain.
+3. **CLI tools** (like nlm): Use --cdp-url http://127.0.0.1:9222 to
+   authenticate via the bridge's running Chrome session.
+
+DO NOT launch a fresh browser when authenticated sessions exist in the bridge.
+Always check bridge_auth first, and if the domain is authenticated, connect
+to the bridge's Chrome on port 9222 instead.
 
 ### Tools
 - **browser_bridge_open** — Start the bridge (launches remote viewer)

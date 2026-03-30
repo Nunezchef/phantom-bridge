@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
-from observer.cdp_client import CDPClient
+from .cdp_client import CDPClient
 
 logger = logging.getLogger("phantom_bridge")
 

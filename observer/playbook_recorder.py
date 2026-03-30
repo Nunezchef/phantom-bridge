@@ -20,8 +20,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from observer.cdp_client import CDPClient
-from observer.playbook import Playbook, PlaybookStep, slugify
+from .cdp_client import CDPClient
+from .playbook import Playbook, PlaybookStep, slugify
 
 logger = logging.getLogger("phantom_bridge")
 

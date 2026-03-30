@@ -10,10 +10,6 @@ class ScreencastHandler(ApiHandler):
     def get_methods(cls) -> list[str]:
         return ["GET", "POST"]
 
-    @classmethod
-    def requires_csrf(cls) -> bool:
-        return False
-
     async def process(self, input: dict, request: Request) -> dict | Response:
         action = input.get("action", "frame")
 

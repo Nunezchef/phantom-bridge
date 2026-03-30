@@ -151,15 +151,9 @@ class BrowserBridge:
         if self._display:
             env["DISPLAY"] = self._display
 
-        # Launch via helper script to survive A0's process management.
-        # The Playwright ARM64 Chromium build receives SIGTRAP when launched
-        # directly from Python's subprocess.Popen in A0's runtime.
-        launcher = Path(__file__).parent / "launch_chrome.sh"
-        launch_args = [str(launcher)] + args if launcher.exists() else args
-
         try:
             self._process = subprocess.Popen(
-                launch_args,
+                args,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 env=env,

@@ -143,7 +143,7 @@
                         await fetch(vncTestUrl, { mode: 'no-cors', signal: AbortSignal.timeout(2000) });
                         // noVNC is reachable
                         this.mode = 'vnc';
-                        this.vncUrl = vncTestUrl + '?autoconnect=true&resize=remote&reconnect=true';
+                        this.vncUrl = vncTestUrl + '?autoconnect=true&resize=scale&reconnect=true';
                         this.connected = true;
                         return;
                     } catch (e) {

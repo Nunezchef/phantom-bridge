@@ -128,7 +128,7 @@
                     return;
                 }
             }
-            const novncUrl = `http://${location.hostname}:6080/vnc.html?autoconnect=true&resize=remote&reconnect=true`;
+            const novncUrl = `http://${location.hostname}:6080/vnc.html?autoconnect=true&resize=scale&reconnect=true`;
             window.open(novncUrl, "phantom-bridge");
         }
     };

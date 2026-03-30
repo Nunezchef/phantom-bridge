@@ -275,7 +275,7 @@ class BrowserBridge:
         if running and self._started_at:
             info["uptime_seconds"] = int(time.time() - self._started_at)
             info["connect_url"] = f"http://localhost:{self.remote_debug_port}"
-            info["novnc_url"] = f"http://localhost:{self.novnc_port}/vnc.html?autoconnect=true&resize=remote"
+            info["novnc_url"] = f"http://localhost:{self.novnc_port}/vnc.html?autoconnect=true&resize=scale"
             info["novnc_port"] = self.novnc_port
             info["novnc_running"] = self._vnc_process is not None and self._vnc_process.poll() is None
             info["pid"] = self._process.pid if self._process else None

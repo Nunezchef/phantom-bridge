@@ -86,13 +86,13 @@ class BrowserBridge:
             # Start supporting services on top of the existing Chrome
             self._start_novnc()
             try:
-                from screencast import ScreencastManager
+                from usr.plugins.phantom_bridge.screencast import ScreencastManager
                 self._screencast = ScreencastManager(port=self.remote_debug_port)
                 await self._screencast.start()
             except Exception:
                 pass
             try:
-                from observer.manager import ObserverManager
+                from usr.plugins.phantom_bridge.observer.manager import ObserverManager
                 data_dir = self.profile_dir.parent
                 self._observer_manager = ObserverManager(port=self.remote_debug_port, data_dir=data_dir)
                 await self._observer_manager.start()
@@ -130,8 +130,11 @@ class BrowserBridge:
             "--disable-translate",
             "--metrics-recording-only",
             "--no-sandbox",
+            "--disable-setuid-sandbox",
             "--disable-dev-shm-usage",
             "--disable-gpu",
+            "--disable-software-rasterizer",
+            "--disable-extensions",
         ]
 
         if self.headless:
@@ -176,7 +179,7 @@ class BrowserBridge:
 
         # Start observer layers (auth registry, sitemap learner, playbook recorder)
         try:
-            from observer.manager import ObserverManager
+            from usr.plugins.phantom_bridge.observer.manager import ObserverManager
 
             data_dir = self.profile_dir.parent  # data/ directory (sibling to profile/)
             self._observer_manager = ObserverManager(
@@ -194,7 +197,7 @@ class BrowserBridge:
 
         # Start screencast manager (zero-config fallback when noVNC port isn't exposed)
         try:
-            from screencast import ScreencastManager
+            from usr.plugins.phantom_bridge.screencast import ScreencastManager
             self._screencast = ScreencastManager(port=self.remote_debug_port)
             await self._screencast.start()
             logger.info("browser_bridge: screencast manager started")
@@ -363,9 +366,20 @@ class BrowserBridge:
         """Start Xvfb if no DISPLAY is set or if the display isn't active."""
         display = ":99"
 
-        # Check if Xvfb is already running on :99
+        # Check if Xvfb is actually running (not just a stale lock)
         lock_file = Path("/tmp/.X99-lock")
+        xvfb_alive = False
         if lock_file.exists():
+            try:
+                pid = int(lock_file.read_text().strip())
+                os.kill(pid, 0)  # Check if process exists
+                xvfb_alive = True
+            except (ValueError, ProcessLookupError, PermissionError):
+                # Stale lock — remove it
+                lock_file.unlink(missing_ok=True)
+                logger.info("browser_bridge: removed stale Xvfb lock")
+
+        if xvfb_alive:
             self._display = display
             os.environ["DISPLAY"] = display
             logger.info("browser_bridge: using existing Xvfb on %s", display)
@@ -619,7 +633,7 @@ class BrowserBridge:
         except Exception:
             return []
 
-    async def _wait_for_devtools(self, timeout: float = 15.0) -> None:
+    async def _wait_for_devtools(self, timeout: float = 30.0) -> None:
         """Poll the DevTools endpoint until it responds or timeout."""
         import urllib.request
 

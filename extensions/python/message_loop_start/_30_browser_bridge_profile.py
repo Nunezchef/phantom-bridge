@@ -41,7 +41,7 @@ class BrowserBridgeProfilePatch(Extension):
 
         # Patch the browser_agent State class
         try:
-            from python.tools.browser_agent import State
+            from plugins._browser_agent.tools.browser_agent import State
 
             original_get_user_data_dir = State.get_user_data_dir
 

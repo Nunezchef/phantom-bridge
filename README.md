@@ -20,6 +20,14 @@
 
 ---
 
+## What's New in v1.1.0
+
+- **Cookies encrypted at rest** — Session tokens are now Fernet-encrypted before hitting disk. The key is auto-generated on first use. Cookie names and metadata stay in plaintext for easy inspection; only values are encrypted.
+- **Per-domain cookie storage** — Replaced the single `cookies.json` with individual files per domain (`data/cookies/<domain>.json`). A0 only loads what it needs — faster and cheaper on tokens.
+- **`bridge_decrypt_cookies` tool** — A0 can decrypt cookies for any domain on demand. Returns a ready-to-use `Cookie:` header for HTTP requests. Plaintext values stay in memory only — never written to disk.
+
+---
+
 ## The Problem
 
 A0 runs inside a Docker container with its own Chromium. When it needs to access authenticated services, the traditional options are:

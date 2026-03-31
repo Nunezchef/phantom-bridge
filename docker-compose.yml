@@ -1,0 +1,32 @@
+# Agent Zero + Phantom Bridge — docker-compose.yml
+#
+# Copy this file to your A0 project root and run:
+#   docker compose up -d
+#
+# Port reference:
+#   5050 → A0 web UI  (container internal: 5000)
+#   6080 → Phantom Bridge noVNC remote viewer
+#
+# Volume reference:
+#   ./a0-data/usr → /a0/usr  persists plugins, browser sessions, encrypted
+#                             cookies, and recorded playbooks across rebuilds.
+#
+# To install Phantom Bridge dependencies on first run:
+#   docker exec -it a0 python /a0/usr/plugins/phantom_bridge/execute.py
+
+services:
+  agent-zero:
+    image: frdel/agent-zero-run:latest
+    container_name: a0          # Change this if your container has a different name.
+                                # Whatever you set here is what you use in:
+                                #   docker exec -it <name> ...
+    restart: unless-stopped
+    ports:
+      - "5050:5000"             # A0 web UI
+      - "6080:6080"             # Phantom Bridge — noVNC remote viewer
+    volumes:
+      - ./a0-data/usr:/a0/usr   # Persists sessions, cookies, plugins, playbooks.
+                                # The data/ subdirectory inside the plugin lives here.
+                                # Without this mount, everything is lost on rebuild.
+    environment:
+      - TZ=UTC                  # Optional: set your timezone

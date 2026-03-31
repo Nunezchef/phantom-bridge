@@ -7,6 +7,10 @@ the core prompt). Teaches A0:
 - What domains are already authenticated
 - What playbooks are available for autonomous replay
 - Where cookies/sessions are stored
+
+For small models (detected by context window ≤ 8192 or known small-model name
+patterns) we inject a compact ~200-token block instead of the full prompt, so
+we don't consume a disproportionate share of their token budget.
 """
 
 from __future__ import annotations
@@ -17,26 +21,91 @@ from pathlib import Path
 from typing import Any
 
 from helpers.extension import Extension
-
 from agent import LoopData
 
 logger = logging.getLogger("phantom_bridge")
 
 _plugin_dir = Path(__file__).resolve().parent.parent.parent
 
+# Model name substrings that indicate a small / local model.
+# Checked case-insensitively against agent.config.chat_model.name.
+_SMALL_MODEL_HINTS = frozenset({
+    "small", "mini", "tiny", "nano", "phi", "gemma", "mistral-7b",
+    "llama-7b", "llama3.2", "qwen-7b", "deepseek-7b",
+})
 
-class BrowserBridgeContext(Extension):
-    async def execute(
-        self,
-        system_prompt: list[str] = [],
-        loop_data: LoopData = LoopData(),
-        **kwargs: Any,
-    ) -> None:
-        data_dir = _plugin_dir / "data"
-        sections: list[str] = []
+# Context window threshold below which we treat the model as "small".
+_SMALL_CTX_THRESHOLD = 8192
 
-        # ----- Core knowledge -----
-        sections.append("""
+# Canonical tool-call examples embedded in both prompt variants.
+# v1.5 guardrails use these for self-correction.
+_TOOL_EXAMPLES = """\
+Tool call examples:
+{"tool":"browser_bridge_open"}
+{"tool":"browser_bridge_status"}
+{"tool":"bridge_auth"}
+{"tool":"bridge_record","action":"start","name":"my_workflow"}
+{"tool":"bridge_record","action":"stop"}
+{"tool":"bridge_record","action":"list"}
+{"tool":"bridge_replay","name":"my_workflow"}
+{"tool":"bridge_decrypt_cookies","domain":"github.com"}
+{"tool":"bridge_health","domain":"github.com"}"""
+
+
+def _is_small_model(agent) -> bool:
+    """Return True when the agent is using a small / limited-context model."""
+    try:
+        cfg = agent.config.chat_model
+        name_lower = getattr(cfg, "name", "").lower()
+        if any(hint in name_lower for hint in _SMALL_MODEL_HINTS):
+            return True
+        ctx = getattr(cfg, "ctx_length", 0)
+        if ctx and ctx <= _SMALL_CTX_THRESHOLD:
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _compact_prompt(data_dir: Path) -> str:
+    """~200-token compact injection for small models.
+
+    Only includes: one-line role statement, tool table, canonical examples,
+    and the live authenticated domain list (capped at 3).
+    """
+    lines = [
+        "## Phantom Bridge",
+        "Browser auth bridge. Use when a service needs login.",
+        "",
+        "Tools: browser_bridge_open, browser_bridge_close, browser_bridge_status,",
+        "  bridge_auth, bridge_health, bridge_sitemap, bridge_record, bridge_replay,",
+        "  bridge_decrypt_cookies",
+        "",
+        _TOOL_EXAMPLES,
+    ]
+
+    auth_file = data_dir / "auth_registry.json"
+    if auth_file.exists():
+        try:
+            registry = json.loads(auth_file.read_text())
+            if registry:
+                lines.append("")
+                lines.append("Authenticated domains:")
+                for domain in list(registry.keys())[:3]:
+                    entry = registry[domain]
+                    status = "active" if entry.get("authenticated") else "EXPIRED"
+                    lines.append(f"  {domain} — {status}")
+        except Exception:
+            pass
+
+    return "\n".join(lines)
+
+
+def _full_prompt(data_dir: Path) -> str:
+    """Full-detail injection for large models."""
+    sections: list[str] = []
+
+    sections.append("""\
 ## Phantom Bridge — Browser Authentication & Automation
 
 You have access to a browser bridge plugin that lets the user authenticate
@@ -94,84 +163,89 @@ The key is stored at `data/.cookie_key` (auto-generated on first export).
 Cookie names and metadata are in plaintext — only values are encrypted.
 To read decrypted cookies, always use the **bridge_decrypt_cookies** tool.
 
-### Tools
-- **browser_bridge_open** — Start the bridge (launches remote viewer)
-- **browser_bridge_close** — Stop the bridge (sessions persist)
-- **browser_bridge_status** — Check bridge status, open pages, domains
-- **bridge_auth** — Which domains are authenticated, session expiry
-- **bridge_health** — Test if a domain's session is still valid
-- **bridge_sitemap** — Learned URL patterns per domain
-- **bridge_record** — Start/stop recording a replayable workflow
-- **bridge_replay** — Replay a saved workflow autonomously
-- **bridge_decrypt_cookies** — Decrypt stored cookies for a domain (for HTTP requests)
-""")
+""" + _TOOL_EXAMPLES)
 
-        # ----- Live auth state -----
-        auth_file = data_dir / "auth_registry.json"
-        if auth_file.exists():
-            try:
-                registry = json.loads(auth_file.read_text())
-                if registry:
-                    sections.append("### Currently Authenticated Domains")
-                    for domain, entry in registry.items():
-                        status = "active" if entry.get("authenticated") else "EXPIRED"
-                        expires = entry.get("expires_at", "unknown")
-                        sections.append(f"- **{domain}** — {status} (expires: {expires})")
-                    sections.append("")
+    # ----- Live auth state -----
+    auth_file = data_dir / "auth_registry.json"
+    if auth_file.exists():
+        try:
+            registry = json.loads(auth_file.read_text())
+            if registry:
+                sections.append("### Currently Authenticated Domains")
+                for domain, entry in registry.items():
+                    status = "active" if entry.get("authenticated") else "EXPIRED"
+                    expires = entry.get("expires_at", "unknown")
+                    sections.append(f"- **{domain}** — {status} (expires: {expires})")
+                sections.append("")
+                sections.append(
+                    "Use these sessions with browser_agent. If a session shows "
+                    "EXPIRED, suggest the user re-authenticate via the bridge."
+                )
+                sections.append("")
+        except Exception:
+            pass
+
+    # ----- Available playbooks (cap at 5 for full prompt, 3 for compact) -----
+    playbooks_dir = data_dir / "playbooks"
+    if playbooks_dir.exists():
+        playbook_files = list(playbooks_dir.glob("*.json"))
+        if playbook_files:
+            sections.append("### Saved Playbooks (replayable workflows)")
+            sections.append(
+                "These are workflows the user demonstrated via the bridge. "
+                "You can replay them autonomously using `bridge_replay`."
+            )
+            for pf in playbook_files[:5]:
+                try:
+                    pb = json.loads(pf.read_text())
+                    name = pb.get("name", pf.stem)
+                    domain = pb.get("domain", "unknown")
+                    steps = len(pb.get("steps", []))
+                    desc = pb.get("description", "")
+                    desc_str = f" — {desc}" if desc else ""
                     sections.append(
-                        "Use these sessions with browser_agent. If a session shows "
-                        "EXPIRED, suggest the user re-authenticate via the bridge."
+                        f"- **{name}** ({domain}, {steps} steps){desc_str}"
                     )
-                    sections.append("")
-            except Exception:
-                pass
+                except Exception:
+                    pass
+            sections.append("")
+            sections.append(
+                "When the user asks you to repeat a task that matches a saved "
+                "playbook, use `bridge_replay` instead of navigating manually."
+            )
+            sections.append("")
 
-        # ----- Available playbooks -----
-        playbooks_dir = data_dir / "playbooks"
-        if playbooks_dir.exists():
-            playbook_files = list(playbooks_dir.glob("*.json"))
-            if playbook_files:
-                sections.append("### Saved Playbooks (replayable workflows)")
-                sections.append(
-                    "These are workflows the user demonstrated via the bridge. "
-                    "You can replay them autonomously using `bridge_replay`."
-                )
-                for pf in playbook_files[:10]:
-                    try:
-                        pb = json.loads(pf.read_text())
-                        name = pb.get("name", pf.stem)
-                        domain = pb.get("domain", "unknown")
-                        steps = len(pb.get("steps", []))
-                        desc = pb.get("description", "")
-                        desc_str = f" — {desc}" if desc else ""
-                        sections.append(
-                            f"- **{name}** ({domain}, {steps} steps){desc_str}"
-                        )
-                    except Exception:
-                        pass
-                sections.append("")
-                sections.append(
-                    "When the user asks you to repeat a task that matches a saved "
-                    "playbook, use `bridge_replay` instead of navigating manually."
-                )
-                sections.append("")
+    # ----- Sitemaps summary (cap at 3) -----
+    sitemaps_dir = data_dir / "sitemaps"
+    if sitemaps_dir.exists():
+        sitemap_files = list(sitemaps_dir.glob("*.json"))
+        if sitemap_files:
+            sections.append("### Learned Site Maps")
+            for sf in sitemap_files[:3]:
+                try:
+                    sm = json.loads(sf.read_text())
+                    domain = sm.get("domain", sf.stem)
+                    features = sm.get("features", {})
+                    sections.append(
+                        f"- **{domain}** — {len(features)} features mapped"
+                    )
+                except Exception:
+                    pass
+            sections.append("")
 
-        # ----- Sitemaps summary -----
-        sitemaps_dir = data_dir / "sitemaps"
-        if sitemaps_dir.exists():
-            sitemap_files = list(sitemaps_dir.glob("*.json"))
-            if sitemap_files:
-                sections.append("### Learned Site Maps")
-                for sf in sitemap_files[:5]:
-                    try:
-                        sm = json.loads(sf.read_text())
-                        domain = sm.get("domain", sf.stem)
-                        features = sm.get("features", {})
-                        sections.append(
-                            f"- **{domain}** — {len(features)} features mapped"
-                        )
-                    except Exception:
-                        pass
-                sections.append("")
+    return "\n".join(sections)
 
-        system_prompt.append("\n".join(sections))
+
+class BrowserBridgeContext(Extension):
+    async def execute(
+        self,
+        system_prompt: list[str] = [],
+        loop_data: LoopData = LoopData(),
+        **kwargs: Any,
+    ) -> None:
+        data_dir = _plugin_dir / "data"
+
+        if _is_small_model(self.agent):
+            system_prompt.append(_compact_prompt(data_dir))
+        else:
+            system_prompt.append(_full_prompt(data_dir))

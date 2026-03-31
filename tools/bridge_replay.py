@@ -26,7 +26,12 @@ class BridgeReplay(Tool):
 
         if not name:
             return Response(
-                message='A "name" argument is required. Use bridge_record with action="list" to see available playbooks.',
+                message=(
+                    'Missing "name". Correct call:\n'
+                    '{"tool":"bridge_replay","name":"my_workflow_name"}\n\n'
+                    'To list available playbooks:\n'
+                    '{"tool":"bridge_record","action":"list"}'
+                ),
                 break_loop=False,
             )
 
@@ -34,8 +39,9 @@ class BridgeReplay(Tool):
         if recorder is None:
             return Response(
                 message=(
-                    "Playbook recorder is not available. "
-                    "The browser bridge must be running with CDP observer enabled."
+                    "Playbook recorder is not available — the browser bridge must be "
+                    "running first. Start it with:\n"
+                    '{"tool":"browser_bridge_open"}'
                 ),
                 break_loop=False,
             )

@@ -19,13 +19,18 @@ export const store = createStore("phantomBridge", {
     playbooks: [],
     playbookCount: 0,
 
+    // Internal — not part of the public store shape
     _pollInterval: null,
+    _ws: null,
 
     init() {},
 
     async onOpen() {
         await this.fetchStatus();
-        this._pollInterval = setInterval(() => this.fetchStatus(), 5000);
+        this._subscribeToWsEvents();
+        // 30-second fallback poll catches anything WS might miss (e.g. tab hidden,
+        // missed events during reconnection).
+        this._pollInterval = setInterval(() => this.fetchStatus(), 30000);
     },
 
     cleanup() {
@@ -33,6 +38,38 @@ export const store = createStore("phantomBridge", {
             clearInterval(this._pollInterval);
             this._pollInterval = null;
         }
+        if (this._ws) {
+            try {
+                this._ws.off("phantom_bridge_status");
+                this._ws.off("phantom_bridge_auth");
+            } catch (_) {}
+            this._ws = null;
+        }
+    },
+
+    // Subscribe to real-time push events emitted by ws_broadcast.py.
+    // Falls back gracefully if A0's WebSocket system is unavailable.
+    _subscribeToWsEvents() {
+        import("/js/websocket.js").then(({ websocket }) => {
+            this._ws = websocket;
+            // Both event types trigger a full status refresh so the UI is always
+            // consistent — the event payload is not used directly.
+            websocket.on("phantom_bridge_status", () => this.fetchStatus());
+            // A new login was detected: export cookies to disk first so the
+            // on-disk encrypted files are current before fetchStatus() reads them.
+            websocket.on("phantom_bridge_auth", () => this._exportAndRefresh());
+        }).catch(() => {
+            // WS not available — the 30s fallback poll handles updates.
+        });
+    },
+
+    // Called on phantom_bridge_auth events: flush new cookies to disk before
+    // reading them. Swallows errors so a failed export doesn't block the UI update.
+    async _exportAndRefresh() {
+        try {
+            await api("bridge", { action: "export_cookies" });
+        } catch (_) {}
+        await this.fetchStatus();
     },
 
     async fetchStatus() {
@@ -43,12 +80,7 @@ export const store = createStore("phantomBridge", {
             this.novncUrl = status.novnc_url || "";
             this.novncPort = status.novnc_port || 6080;
 
-            // Auto-export cookies to get fresh counts
-            if (this.running) {
-                await api("bridge", { action: "export_cookies" });
-            }
-
-            // Cookie domains
+            // Cookie domains — read from encrypted on-disk files; no CDP roundtrip.
             const cookieData = await api("bridge", { action: "cookies" });
             const cookies = cookieData.cookies || {};
             this.cookieDomains = Object.entries(cookies).map(([domain, info]) => ({

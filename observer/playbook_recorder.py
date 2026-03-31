@@ -25,6 +25,17 @@ from .playbook import Playbook, PlaybookStep, slugify
 
 logger = logging.getLogger("phantom_bridge")
 
+
+def _safe_str(s: str) -> str:
+    """Strip lone Unicode surrogates that break JSON serialisation.
+
+    DOM event payloads (click text, typed values, selectors) arrive as raw
+    strings from web pages and can contain malformed UTF-16 sequences.
+    Round-tripping through UTF-8 with errors='replace' eliminates them so
+    playbook JSON files are always valid.
+    """
+    return s.encode("utf-8", errors="replace").decode("utf-8")
+
 # File extensions to ignore when recording network requests
 _STATIC_EXTENSIONS = frozenset({
     ".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
@@ -487,6 +498,16 @@ class PlaybookRecorder:
         if not event_type or not selector:
             return
 
+        # Sanitize all string fields from the DOM — pages can return lone
+        # Unicode surrogates that break JSON serialization.
+        selector = _safe_str(selector)
+        raw_text = data.get("text")
+        raw_value = data.get("value")
+        raw_url = data.get("url")
+        text = _safe_str(raw_text) if raw_text else None
+        value = _safe_str(raw_value) if raw_value is not None else None
+        url = _safe_str(raw_url) if raw_url else None
+
         now_iso = datetime.now(timezone.utc).isoformat()
 
         if event_type == "click":
@@ -494,33 +515,33 @@ class PlaybookRecorder:
                 action="click",
                 timestamp=now_iso,
                 selector=selector,
-                text=data.get("text") or None,
-                url=data.get("url") or None,
+                text=text,
+                url=url,
             ))
         elif event_type == "type":
             self._add_step(PlaybookStep(
                 action="type",
                 timestamp=now_iso,
                 selector=selector,
-                value=data.get("value", ""),
-                url=data.get("url") or None,
+                value=value or "",
+                url=url,
             ))
         elif event_type == "select":
             self._add_step(PlaybookStep(
                 action="select",
                 timestamp=now_iso,
                 selector=selector,
-                value=data.get("value", ""),
-                url=data.get("url") or None,
+                value=value or "",
+                url=url,
             ))
         elif event_type == "submit":
             self._add_step(PlaybookStep(
                 action="submit",
                 timestamp=now_iso,
                 selector=selector,
-                text=data.get("text") or None,
-                value=data.get("value") or None,
-                url=data.get("url") or None,
+                text=text,
+                value=value,
+                url=url,
             ))
 
     # ------------------------------------------------------------------

@@ -35,6 +35,7 @@ class ObserverManager:
         self._sitemap: Any = None
         self._playbook: Any = None
         self._tasks: list[asyncio.Task] = []
+        self._started: bool = False
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -42,7 +43,11 @@ class ObserverManager:
 
     async def start(self) -> None:
         """Connect CDP, enable domains, start all observers."""
+        if self._started:
+            logger.warning("observer_manager: start() called on already-started manager; ignoring")
+            return
         await self._cdp.connect()
+        self._started = True
 
         # Start CDP listener FIRST — it reads responses from the WebSocket.
         # Without it, send() calls hang because nobody reads the response.
@@ -52,6 +57,7 @@ class ObserverManager:
 
         # Level 1: Auth Registry (always available)
         await self._auth.start()
+        self._auth.set_auth_callback(self._on_auth_detected)
 
         # Level 2: Sitemap Learner (optional — Stream B)
         try:
@@ -99,7 +105,28 @@ class ObserverManager:
         self._tasks.clear()
 
         await self._cdp.disconnect()
+        self._started = False
         logger.info("observer_manager: all observers stopped")
+
+    # ------------------------------------------------------------------
+    # Event callbacks
+    # ------------------------------------------------------------------
+
+    async def _on_auth_detected(self, domain: str, entry) -> None:
+        """Broadcast a phantom_bridge_auth event when a domain authenticates."""
+        try:
+            from usr.plugins.phantom_bridge.ws_broadcast import broadcast
+            await broadcast(
+                "phantom_bridge_auth",
+                {
+                    "domain": domain,
+                    "authenticated": entry.authenticated,
+                    "expires_at": entry.expires_at,
+                    "cookies_count": entry.cookies_count,
+                },
+            )
+        except Exception as exc:
+            logger.debug("observer_manager: ws_broadcast failed: %s", exc)
 
     # ------------------------------------------------------------------
     # Properties

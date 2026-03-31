@@ -195,6 +195,13 @@ class BrowserBridge:
         # Start noVNC (x11vnc + websockify) for remote browser control
         self._start_novnc()
 
+        # Notify connected UI clients that the bridge is now running.
+        try:
+            from usr.plugins.phantom_bridge.ws_broadcast import broadcast as _ws_broadcast
+            await _ws_broadcast("phantom_bridge_status", {"running": True})
+        except Exception:
+            pass
+
         # Start screencast manager (zero-config fallback when noVNC port isn't exposed)
         try:
             from usr.plugins.phantom_bridge.screencast import ScreencastManager
@@ -247,6 +254,13 @@ class BrowserBridge:
             self._process = None
             self._started_at = None
             _bridge = None
+
+        # Notify connected UI clients that the bridge has stopped.
+        try:
+            from usr.plugins.phantom_bridge.ws_broadcast import broadcast as _ws_broadcast
+            await _ws_broadcast("phantom_bridge_status", {"running": False})
+        except Exception:
+            pass
 
         return {"running": False, "message": f"Bridge stopped (pid {pid})."}
 

@@ -19,6 +19,17 @@ from .cdp_client import CDPClient
 
 logger = logging.getLogger("phantom_bridge")
 
+
+def _safe_str(s: str) -> str:
+    """Strip lone Unicode surrogates that break JSON serialisation.
+
+    Some web pages contain malformed UTF-16 sequences (lone surrogates U+D800–
+    U+DFFF) in their titles or URLs.  Python's json.dumps raises UnicodeEncodeError
+    on these, which silently swallows the whole sitemap save.  Round-tripping
+    through UTF-8 with errors='replace' eliminates them.
+    """
+    return s.encode("utf-8", errors="replace").decode("utf-8")
+
 # Extensions to ignore (static assets, fonts, etc.)
 _SKIP_EXTENSIONS = frozenset({
     ".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg",
@@ -180,7 +191,7 @@ class SitemapLearner:
             )
             value = result.get("result", {}).get("value")
             if isinstance(value, str) and value.strip():
-                return value.strip()
+                return _safe_str(value.strip())
         except Exception:
             logger.debug("Failed to fetch document.title", exc_info=True)
         return None
@@ -240,6 +251,10 @@ class SitemapLearner:
 
         pv.visit_count += 1
         pv.last_visited = now
+
+        # Sanitize title before storing (lone surrogates break JSON serialization)
+        if title:
+            title = _safe_str(title)
 
         # Add title (deduplicated)
         if title and title not in pv.titles:

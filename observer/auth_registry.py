@@ -68,6 +68,23 @@ class AuthRegistry:
         self._pre_nav_cookies: dict[str, set[str]] = {}  # domain -> cookie names
         self._pending_auth_check: set[str] = set()  # domains flagged for cookie diff
         self._file_path = data_dir / "auth_registry.json"
+        # Optional async callable(domain: str, entry: AuthEntry) fired after a new
+        # domain is authenticated.  Set via set_auth_callback().
+        self._auth_callback = None
+
+    # ------------------------------------------------------------------
+    # Callback registration
+    # ------------------------------------------------------------------
+
+    def set_auth_callback(self, callback) -> None:
+        """Register an async callable invoked when a domain authenticates.
+
+        Signature: ``async def callback(domain: str, entry: AuthEntry) -> None``
+
+        The callback is fire-and-forget (wrapped in asyncio.create_task) so a
+        slow or failing callback never blocks auth detection.
+        """
+        self._auth_callback = callback
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -272,6 +289,12 @@ class AuthRegistry:
         )
 
         self._save()
+
+        # Notify listeners (e.g. WS broadcaster) without blocking detection.
+        if self._auth_callback is not None:
+            asyncio.create_task(
+                self._auth_callback(domain, self._registry[domain])
+            )
 
     @staticmethod
     def _is_auth_cookie_name(name: str) -> bool:

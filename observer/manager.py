@@ -52,6 +52,7 @@ class ObserverManager:
 
         # Level 1: Auth Registry (always available)
         await self._auth.start()
+        self._auth.set_auth_callback(self._on_auth_detected)
 
         # Level 2: Sitemap Learner (optional — Stream B)
         try:
@@ -100,6 +101,26 @@ class ObserverManager:
 
         await self._cdp.disconnect()
         logger.info("observer_manager: all observers stopped")
+
+    # ------------------------------------------------------------------
+    # Event callbacks
+    # ------------------------------------------------------------------
+
+    async def _on_auth_detected(self, domain: str, entry) -> None:
+        """Broadcast a phantom_bridge_auth event when a domain authenticates."""
+        try:
+            from usr.plugins.phantom_bridge.ws_broadcast import broadcast
+            await broadcast(
+                "phantom_bridge_auth",
+                {
+                    "domain": domain,
+                    "authenticated": entry.authenticated,
+                    "expires_at": entry.expires_at,
+                    "cookies_count": entry.cookies_count,
+                },
+            )
+        except Exception as exc:
+            logger.debug("observer_manager: ws_broadcast failed: %s", exc)
 
     # ------------------------------------------------------------------
     # Properties

@@ -230,7 +230,7 @@ docker run -d \
   frdel/agent-zero-run:latest
 ```
 
-> **Container name:** The name `a0` used in `docker exec -it a0 ...` must match the `--name` flag (docker run) or the service name in your compose file. If your container has a different name, substitute it everywhere.
+> **Container name:** `docker exec` targets the **container name**, not the Compose service name. The container name is set by `container_name:` in `docker-compose.yml` (defaulting to something like `a0-agent-zero-1` if omitted) or by `--name` in `docker run`. The included `docker-compose.yml` sets `container_name: a0`, so `docker exec -it a0 ...` works as shown. If you omit `container_name:` or use a different value, either update the exec commands to match, or use `docker compose exec <service> ...` (e.g. `docker compose exec agent-zero ...`) which targets the service name directly and always works.
 
 > **No port 6080?** The plugin still works — it falls back to a screencast mode that streams through A0's existing port (5050). No extra ports needed. The sidebar panel automatically detects which mode is available.
 

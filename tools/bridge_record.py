@@ -25,11 +25,12 @@ class BridgeRecord(Tool):
         if action not in ("start", "stop", "list", "delete"):
             return Response(
                 message=(
-                    "Invalid action. Use one of: start, stop, list, delete.\n"
-                    '  start — begin recording (requires "name")\n'
-                    "  stop  — stop recording and save playbook\n"
-                    "  list  — list all saved playbooks\n"
-                    '  delete — delete a playbook (requires "name")'
+                    "Invalid action. Use one of: start, stop, list, delete.\n\n"
+                    "Correct call examples:\n"
+                    '{"tool":"bridge_record","action":"start","name":"my_workflow"}\n'
+                    '{"tool":"bridge_record","action":"stop"}\n'
+                    '{"tool":"bridge_record","action":"list"}\n'
+                    '{"tool":"bridge_record","action":"delete","name":"my_workflow"}'
                 ),
                 break_loop=False,
             )
@@ -38,8 +39,9 @@ class BridgeRecord(Tool):
         if recorder is None:
             return Response(
                 message=(
-                    "Playbook recorder is not available. "
-                    "The browser bridge must be running with CDP observer enabled."
+                    "Playbook recorder is not available — the browser bridge must be "
+                    "running first. Start it with:\n"
+                    '{"tool":"browser_bridge_open"}'
                 ),
                 break_loop=False,
             )
@@ -59,7 +61,10 @@ class BridgeRecord(Tool):
     async def _start_recording(self, recorder: Any, name: str) -> Response:
         if not name:
             return Response(
-                message='A "name" argument is required to start recording.',
+                message=(
+                    'Missing "name". Correct call:\n'
+                    '{"tool":"bridge_record","action":"start","name":"my_workflow_name"}'
+                ),
                 break_loop=False,
             )
         try:
@@ -119,7 +124,10 @@ class BridgeRecord(Tool):
     def _delete_playbook(self, recorder: Any, name: str) -> Response:
         if not name:
             return Response(
-                message='A "name" argument is required to delete a playbook.',
+                message=(
+                    'Missing "name". Correct call:\n'
+                    '{"tool":"bridge_record","action":"delete","name":"my_workflow_name"}'
+                ),
                 break_loop=False,
             )
 

@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.1.1] - 2026-03-30
+
+### Added
+- **WebSocket push events** (`ws_broadcast.py`) — Bridge status and auth events are
+  now pushed to the A0 UI in real time via Socket.IO using the A0 v1.5
+  `ServerDeliveryEnvelope` format (`{handlerId, eventId, correlationId, ts, data}`).
+  Eliminates the need to poll for bridge state changes.
+- **Full test suite** — 106 tests across 7 files covering WS broadcast envelope shape,
+  auth callbacks, system prompt routing, cache-control headers, Unicode sanitization,
+  tool error messages, and task lifecycle.
+
+### Changed
+- **`webui/phantom-bridge-store.js`** — Replaced 5-second polling with WebSocket
+  subscriptions (`phantom_bridge_status`, `phantom_bridge_auth`). Fallback poll
+  interval extended to 30 seconds. On auth events, `export_cookies` is called before
+  `fetchStatus()` so on-disk encrypted cookie files are always current (fixes P1
+  reviewer comment).
+- **`observer/manager.py`** — Added `_started` guard to make `start()` idempotent;
+  `stop()` cancels and awaits all background tasks, clears the task list, and resets
+  the flag. `_started = True` is now set only after `connect()` succeeds so a failed
+  CDP connection leaves the manager in a retryable state (fixes P2 reviewer comment).
+- **`extensions/system_prompt/_45_browser_bridge.py`** — Detects small/local models
+  by name substring or context window ≤ 8192 and injects a compact ~200-token block
+  instead of the full prompt. Both variants include canonical JSON tool-call examples
+  for A0 v1.5 self-correction. Dynamic sections capped (5 playbooks, 3 sitemaps).
+- **`api/bridge.py`** — Added `Cache-Control: no-store` on all responses to opt out
+  of A0 v1.5 API/WS caching. Added `from __future__ import annotations` for Python
+  3.9 compatibility.
+- **`observer/sitemap_learner.py` / `observer/playbook_recorder.py`** — Page titles
+  and DOM event strings are run through `_safe_str()` (UTF-8 round-trip with
+  `errors='replace'`) before storage to prevent lone Unicode surrogates from crashing
+  `json.dumps`.
+- **`tools/bridge_record.py` / `tools/bridge_replay.py`** — All error responses now
+  include canonical JSON call examples so A0 v1.5 agents can self-correct malformed
+  tool invocations without human intervention. `break_loop=False` on all error paths.
+
 ## [1.1.0] - 2026-03-30
 
 ### Added

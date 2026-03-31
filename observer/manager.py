@@ -46,8 +46,8 @@ class ObserverManager:
         if self._started:
             logger.warning("observer_manager: start() called on already-started manager; ignoring")
             return
-        self._started = True
         await self._cdp.connect()
+        self._started = True
 
         # Start CDP listener FIRST — it reads responses from the WebSocket.
         # Without it, send() calls hang because nobody reads the response.

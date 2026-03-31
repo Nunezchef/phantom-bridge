@@ -55,10 +55,21 @@ export const store = createStore("phantomBridge", {
             // Both event types trigger a full status refresh so the UI is always
             // consistent — the event payload is not used directly.
             websocket.on("phantom_bridge_status", () => this.fetchStatus());
-            websocket.on("phantom_bridge_auth", () => this.fetchStatus());
+            // A new login was detected: export cookies to disk first so the
+            // on-disk encrypted files are current before fetchStatus() reads them.
+            websocket.on("phantom_bridge_auth", () => this._exportAndRefresh());
         }).catch(() => {
             // WS not available — the 30s fallback poll handles updates.
         });
+    },
+
+    // Called on phantom_bridge_auth events: flush new cookies to disk before
+    // reading them. Swallows errors so a failed export doesn't block the UI update.
+    async _exportAndRefresh() {
+        try {
+            await api("bridge", { action: "export_cookies" });
+        } catch (_) {}
+        await this.fetchStatus();
     },
 
     async fetchStatus() {

@@ -35,6 +35,7 @@ class ObserverManager:
         self._sitemap: Any = None
         self._playbook: Any = None
         self._tasks: list[asyncio.Task] = []
+        self._started: bool = False
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -42,6 +43,10 @@ class ObserverManager:
 
     async def start(self) -> None:
         """Connect CDP, enable domains, start all observers."""
+        if self._started:
+            logger.warning("observer_manager: start() called on already-started manager; ignoring")
+            return
+        self._started = True
         await self._cdp.connect()
 
         # Start CDP listener FIRST — it reads responses from the WebSocket.
@@ -100,6 +105,7 @@ class ObserverManager:
         self._tasks.clear()
 
         await self._cdp.disconnect()
+        self._started = False
         logger.info("observer_manager: all observers stopped")
 
     # ------------------------------------------------------------------

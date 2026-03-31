@@ -1,5 +1,7 @@
 """Bridge API handler — start/stop bridge, observer data queries."""
 
+from __future__ import annotations
+
 import json
 import urllib.request
 from pathlib import Path
@@ -9,6 +11,18 @@ _plugin_root = Path(__file__).resolve().parent.parent
 
 
 class BridgeHandler(ApiHandler):
+
+    async def handle_request(self, request: Request) -> Response:
+        """Override to add Cache-Control: no-store on all responses.
+
+        Bridge status, cookies, and auth data are always live — caching any of
+        them would cause the UI to show stale state (e.g. a crashed bridge that
+        appears running, or auth domains that haven't refreshed yet).
+        A0 v1.5 enables API/WS caching by default, so we opt out explicitly.
+        """
+        response: Response = await super().handle_request(request)
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     async def process(self, input: dict, request: Request) -> dict | Response:
         action = input.get("action", "status")

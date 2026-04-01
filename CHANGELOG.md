@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.0] - 2026-03-31
+
+### Added
+- **Robust playbook replay** — Recorded playbooks now capture 6 locator strategies per step (CSS selector, visible text, ARIA role, aria-label, placeholder, label text). During replay, if the exact CSS selector fails, the engine falls back through alternative strategies automatically. Survives dynamic class names, hashed IDs, and SPA re-renders.
+- **`Playbook.to_agent_instructions()`** — Generates natural-language workflow descriptions with prioritized locator hints, letting A0 reason about element location instead of blindly executing brittle scripts.
+- **Recording UI** — Start and stop playbook recordings directly from the sidebar panel with real-time notifications and an A0 progress bar.
+- **Recording API endpoints** — `record_start` and `record_stop` actions in `api/bridge.py` for WebUI-driven recording control.
+
+### Changed
+- `observer/playbook_recorder.py` — DOM hook now captures `role`, `aria-label`, `placeholder`, `label text`, `tag`, and `input_type` alongside CSS selectors during recording.
+- `observer/playbook.py` — `PlaybookStep` dataclass extended with 6 new fields (`tag`, `role`, `aria_label`, `placeholder`, `label_text`, `input_type`).
+- `tools/bridge_replay.py` — Replaced rigid single-selector `_replay_live` with `_robust_click`, `_robust_fill`, and `_robust_select` methods using multi-strategy fallback chains. Aria-label click fallback uses `get_by_role` for icon-only buttons/links. Fill fallback infers the correct ARIA role from `input_type` instead of hardcoding `textbox`.
+- `extensions/prompts/agent.system.tool.bridge_replay.md` — Updated tool docs to describe robust replay behavior.
+- `plugin.yaml` — Version bumped to 1.2.0.
+
 ## [1.1.1] - 2026-03-30
 
 ### Added

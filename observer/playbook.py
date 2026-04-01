@@ -20,15 +20,22 @@ from typing import Any
 class PlaybookStep:
     """A single recorded action."""
 
-    action: str  # "navigate", "click", "type", "select", "submit", "wait", "scroll", "download", "request"
-    timestamp: str  # ISO timestamp when this step occurred
-    url: str | None = None  # current page URL
-    selector: str | None = None  # CSS selector (if applicable)
-    value: str | None = None  # typed text, selected option, clicked href, downloaded filename
-    text: str | None = None  # human-readable element text (e.g. button label)
-    wait_ms: int | None = None  # time until the *next* step (for replay pacing)
-    method: str | None = None  # HTTP method for request steps
-    content_type: str | None = None  # content-type for request steps
+    action: str
+    timestamp: str
+    url: str | None = None
+    selector: str | None = None
+    value: str | None = None
+    text: str | None = None
+    wait_ms: int | None = None
+    method: str | None = None
+    content_type: str | None = None
+    # Robust locator strategies (captured during recording)
+    tag: str | None = None
+    role: str | None = None
+    aria_label: str | None = None
+    placeholder: str | None = None
+    label_text: str | None = None
+    input_type: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -134,8 +141,7 @@ class Playbook:
                 )
             else:
                 nav_steps.append(
-                    f"    {step_comment}\n"
-                    f"    await asyncio.sleep({wait / 1000:.1f})"
+                    f"    {step_comment}\n    await asyncio.sleep({wait / 1000:.1f})"
                 )
 
         steps_block = "\n\n".join(nav_steps) if nav_steps else "    pass"
@@ -179,6 +185,65 @@ class Playbook:
                 asyncio.run(main())
         """)
         return script
+
+    def to_agent_instructions(self) -> str:
+        """Generate natural-language workflow instructions for A0.
+
+        Instead of a rigid Playwright script, produces human-readable steps
+        with multi-strategy locator hints. A0 uses its reasoning to find
+        elements when exact selectors fail.
+        """
+        action_verbs = {
+            "navigate": "Navigate to {url}",
+            "click": "Click {locator}",
+            "type": "Type {value!r} into {locator}",
+            "select": "Select {value!r} in {locator}",
+            "submit": "Submit via {locator}",
+            "download": "Wait for download: {value}",
+            "request": "Note: {method} request to {url}",
+        }
+
+        def _locator(step: PlaybookStep) -> str:
+            """Build a prioritized locator hint string."""
+            hints = []
+            if step.text:
+                hints.append(f'text "{step.text}"')
+            if step.aria_label:
+                hints.append(f'aria-label "{step.aria_label}"')
+            if step.label_text:
+                hints.append(f'label "{step.label_text}"')
+            if step.placeholder:
+                hints.append(f'placeholder "{step.placeholder}"')
+            if step.role:
+                hints.append(f"role={step.role}")
+            if step.selector:
+                hints.append(f"selector: {step.selector}")
+            return (
+                "; try in order: " + ", ".join(hints) if hints else "(no locator hint)"
+            )
+
+        lines = [
+            f"I recorded this workflow: {self.name}",
+            f"Domain: {self.domain}",
+            f"Steps: {len(self.steps)}",
+            "",
+            "Execute these steps in order. Use the locator hints to find elements.",
+            "If a selector fails, fall back to the next hint (text > aria-label > role).",
+            "",
+        ]
+
+        for i, step in enumerate(self.steps, 1):
+            verb_template = action_verbs.get(step.action, "{action}")
+            verb = verb_template.format(
+                url=step.url or "",
+                locator=_locator(step),
+                value=step.value or "",
+                method=step.method or "",
+                action=step.action,
+            )
+            lines.append(f"{i}. {verb}")
+
+        return "\n".join(lines)
 
 
 def slugify(name: str) -> str:

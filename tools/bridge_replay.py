@@ -18,18 +18,21 @@ logger = logging.getLogger("phantom_bridge")
 
 
 class BridgeReplay(Tool):
-
     async def execute(self, **kwargs: Any) -> Response:
         name = self.args.get("name", "")
         dry_run = str(self.args.get("dry_run", "false")).lower() in ("true", "1", "yes")
-        skip_health = str(self.args.get("skip_health_check", "false")).lower() in ("true", "1", "yes")
+        skip_health = str(self.args.get("skip_health_check", "false")).lower() in (
+            "true",
+            "1",
+            "yes",
+        )
 
         if not name:
             return Response(
                 message=(
                     'Missing "name". Correct call:\n'
                     '{"tool":"bridge_replay","name":"my_workflow_name"}\n\n'
-                    'To list available playbooks:\n'
+                    "To list available playbooks:\n"
                     '{"tool":"bridge_record","action":"list"}'
                 ),
                 break_loop=False,
@@ -89,7 +92,7 @@ class BridgeReplay(Tool):
         return await self._replay_live(playbook, profile_dir)
 
     async def _replay_live(self, playbook: Any, profile_dir: str) -> Response:
-        """Execute the playbook using Playwright."""
+        """Execute the playbook using Playwright with robust locator fallbacks."""
         try:
             from playwright.async_api import async_playwright
         except ImportError:
@@ -128,41 +131,44 @@ class BridgeReplay(Tool):
                             progress_lines.append(
                                 f"Step {step_num}/{total}: Navigating to {step.url}"
                             )
-                            await page.goto(step.url, wait_until="networkidle", timeout=30000)
-                        elif step.action == "click" and step.selector:
+                            await page.goto(
+                                step.url, wait_until="networkidle", timeout=30000
+                            )
+
+                        elif step.action == "click":
                             label = f" ({step.text})" if step.text else ""
                             progress_lines.append(
-                                f"Step {step_num}/{total}: Click {step.selector}{label}"
+                                f"Step {step_num}/{total}: Click{label}"
                             )
-                            await page.click(step.selector, timeout=10000)
-                        elif step.action == "type" and step.selector:
+                            await self._robust_click(page, step)
+
+                        elif step.action == "type":
                             progress_lines.append(
-                                f"Step {step_num}/{total}: Type into {step.selector}"
+                                f"Step {step_num}/{total}: Type into field"
                             )
-                            await page.fill(step.selector, step.value or "", timeout=10000)
-                        elif step.action == "select" and step.selector:
+                            await self._robust_fill(page, step)
+
+                        elif step.action == "select":
                             progress_lines.append(
-                                f"Step {step_num}/{total}: Select '{step.value}' in {step.selector}"
+                                f"Step {step_num}/{total}: Select option"
                             )
-                            await page.select_option(step.selector, step.value or "", timeout=10000)
-                        elif step.action == "submit" and step.selector:
+                            await self._robust_select(page, step)
+
+                        elif step.action == "submit":
                             label = f" ({step.text})" if step.text else ""
                             progress_lines.append(
-                                f"Step {step_num}/{total}: Submit{label} via {step.selector}"
+                                f"Step {step_num}/{total}: Submit{label}"
                             )
-                            await page.click(step.selector, timeout=10000)
+                            await self._robust_click(page, step)
+
                         elif step.action == "download":
                             progress_lines.append(
                                 f"Step {step_num}/{total}: Download — {step.value or 'file'}"
                             )
-                            # Downloads happen naturally via navigation;
-                            # we just note it.
                         elif step.action == "request":
                             progress_lines.append(
                                 f"Step {step_num}/{total}: {step.method or 'POST'} {step.url}"
                             )
-                            # Requests triggered by page interaction
-                            # happen naturally during navigation replay.
                         else:
                             progress_lines.append(
                                 f"Step {step_num}/{total}: {step.action}"
@@ -210,6 +216,130 @@ class BridgeReplay(Tool):
             break_loop=False,
         )
 
+    async def _robust_click(self, page, step) -> None:
+        """Click with multi-strategy locator fallback chain."""
+        # 1. Exact selector (fast path)
+        if step.selector:
+            try:
+                await page.click(step.selector, timeout=3000)
+                return
+            except Exception:
+                pass
+
+        # 2. By visible text
+        if step.text:
+            try:
+                await page.get_by_text(step.text, exact=False).first.click(timeout=3000)
+                return
+            except Exception:
+                pass
+
+        # 3. By role + name
+        if step.role and step.text:
+            try:
+                await page.get_by_role(
+                    step.role, name=step.text, exact=False
+                ).first.click(timeout=3000)
+                return
+            except Exception:
+                pass
+
+        # 4. By aria-label
+        if step.aria_label:
+            try:
+                await page.get_by_label(step.aria_label, exact=False).first.click(
+                    timeout=3000
+                )
+                return
+            except Exception:
+                pass
+
+        # 5. Final attempt: loose selector
+        if step.selector:
+            await page.click(step.selector, timeout=10000)
+
+    async def _robust_fill(self, page, step) -> None:
+        """Fill input with multi-strategy locator fallback chain."""
+        value = step.value or ""
+
+        # 1. Exact selector
+        if step.selector:
+            try:
+                await page.fill(step.selector, value, timeout=3000)
+                return
+            except Exception:
+                pass
+
+        # 2. By placeholder
+        if step.placeholder:
+            try:
+                await page.get_by_placeholder(step.placeholder, exact=False).first.fill(
+                    value, timeout=3000
+                )
+                return
+            except Exception:
+                pass
+
+        # 3. By label
+        if step.label_text:
+            try:
+                await page.get_by_label(step.label_text, exact=False).first.fill(
+                    value, timeout=3000
+                )
+                return
+            except Exception:
+                pass
+
+        # 4. By role (textbox)
+        if step.aria_label:
+            try:
+                await page.get_by_role(
+                    "textbox", name=step.aria_label, exact=False
+                ).first.fill(value, timeout=3000)
+                return
+            except Exception:
+                pass
+
+        # 5. Final attempt
+        if step.selector:
+            await page.fill(step.selector, value, timeout=10000)
+
+    async def _robust_select(self, page, step) -> None:
+        """Select option with multi-strategy locator fallback chain."""
+        value = step.value or ""
+
+        # 1. Exact selector
+        if step.selector:
+            try:
+                await page.select_option(step.selector, value, timeout=3000)
+                return
+            except Exception:
+                pass
+
+        # 2. By label
+        if step.label_text:
+            try:
+                await page.get_by_label(
+                    step.label_text, exact=False
+                ).first.select_option(value, timeout=3000)
+                return
+            except Exception:
+                pass
+
+        # 3. By aria-label
+        if step.aria_label:
+            try:
+                await page.get_by_label(
+                    step.aria_label, exact=False
+                ).first.select_option(value, timeout=3000)
+                return
+            except Exception:
+                pass
+
+        # 4. Final attempt
+        if step.selector:
+            await page.select_option(step.selector, value, timeout=10000)
+
     async def _check_session_health(self, domain: str) -> dict | None:
         """Check session health for the playbook's domain before replay.
 
@@ -233,6 +363,7 @@ class BridgeReplay(Tool):
         """Get the PlaybookRecorder instance."""
         try:
             from usr.plugins.phantom_bridge.bridge import get_bridge
+
             bridge = get_bridge()
             if bridge and hasattr(bridge, "_playbook_recorder"):
                 return bridge._playbook_recorder
@@ -252,6 +383,7 @@ class BridgeReplay(Tool):
         """Resolve the bridge's profile directory."""
         try:
             from usr.plugins.phantom_bridge.bridge import get_bridge
+
             bridge = get_bridge()
             if bridge:
                 return str(bridge.get_profile_dir())

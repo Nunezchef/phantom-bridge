@@ -244,10 +244,20 @@ class BridgeReplay(Tool):
             except Exception:
                 pass
 
-        # 4. By aria-label
+        # 4. By role + aria-label (covers icon-only buttons/links)
+        if step.aria_label and step.role:
+            try:
+                await page.get_by_role(
+                    step.role, name=step.aria_label, exact=False
+                ).first.click(timeout=3000)
+                return
+            except Exception:
+                pass
+
+        # 4b. By aria-label alone (any role)
         if step.aria_label:
             try:
-                await page.get_by_label(step.aria_label, exact=False).first.click(
+                await page.locator(f'[aria-label="{step.aria_label}"]').first.click(
                     timeout=3000
                 )
                 return
@@ -290,11 +300,21 @@ class BridgeReplay(Tool):
             except Exception:
                 pass
 
-        # 4. By role (textbox)
+        # 4. By role + aria-label (use recorded role or infer from input_type)
         if step.aria_label:
+            _INPUT_TYPE_ROLES = {
+                "number": "spinbutton",
+                "search": "searchbox",
+                "email": "textbox",
+                "password": "textbox",
+                "tel": "textbox",
+                "url": "textbox",
+                "text": "textbox",
+            }
+            role = step.role or _INPUT_TYPE_ROLES.get(step.input_type or "", "textbox")
             try:
                 await page.get_by_role(
-                    "textbox", name=step.aria_label, exact=False
+                    role, name=step.aria_label, exact=False
                 ).first.fill(value, timeout=3000)
                 return
             except Exception:

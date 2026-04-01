@@ -26,11 +26,17 @@
 - **Agent-guided instructions** — New `Playbook.to_agent_instructions()` generates natural-language workflow descriptions with prioritized locator hints, letting A0 reason about element location instead of blindly executing brittle scripts.
 - **Recording UI** — Start and stop playbook recordings directly from the sidebar panel with real-time notifications and an A0 progress bar.
 
-### v1.1.0
+### v1.1.1
 
-- **Cookies encrypted at rest** — Session tokens are now Fernet-encrypted before hitting disk. The key is auto-generated on first use. Cookie names and metadata stay in plaintext for easy inspection; only values are encrypted.
-- **Per-domain cookie storage** — Replaced the single `cookies.json` with individual files per domain (`data/cookies/<domain>.json`). A0 only loads what it needs — faster and cheaper on tokens.
-- **`bridge_decrypt_cookies` tool** — A0 can decrypt cookies for any domain on demand. Returns a ready-to-use `Cookie:` header for HTTP requests. Plaintext values stay in memory only — never written to disk.
+- **WebSocket push events** — Bridge status and auth events are pushed to the UI in real time. No more 5-second polling.
+- **Self-correction error messages** — All tool error paths now include canonical JSON call examples so A0 v1.5 agents can fix malformed calls automatically.
+- **Small-model prompt** — Compact ~200-token system prompt variant for models with ≤ 8192 context window, preserving their token budget.
+- **Unicode sanitization** — Page titles and DOM events are sanitized before storage so lone surrogates from malformed web pages never crash JSON serialization.
+- **Cache-Control: no-store** — Bridge API responses opt out of A0 v1.5's new API caching so status and cookie data are always live.
+- **Task lifecycle safety** — `ObserverManager.start()` is idempotent; `stop()` cancels and awaits all background tasks.
+- **Review fixes** — Cookie files are now flushed to disk when a new login is detected (not just on poll), and a failed CDP connect no longer permanently blocks retries.
+
+**v1.1.0** — Cookies encrypted at rest (Fernet), per-domain cookie files, `bridge_decrypt_cookies` tool.
 
 ---
 
@@ -174,38 +180,65 @@ The `_30_browser_bridge_profile.py` extension runs at `message_loop_start` and p
 ### 1. Install the plugin
 
 ```bash
-# Copy into A0's plugin directory
-cp -r phantom_bridge /path/to/a0/usr/plugins/
-
-# Or clone directly
+# Clone into A0's plugin directory
 git clone https://github.com/Nunezchef/phantom-bridge.git /path/to/a0/usr/plugins/phantom_bridge
+
+# Or copy if you already have the files
+cp -r phantom_bridge /path/to/a0/usr/plugins/
 ```
 
 ### 2. Install dependencies
 
-From A0's Plugins UI, click **Execute** on Phantom Bridge. Or run manually:
+From A0's Plugins UI, click **Execute** on Phantom Bridge. Or run manually inside the container:
 
 ```bash
+# Replace "a0" with your container name if different (see step 3)
 docker exec -it a0 python /a0/usr/plugins/phantom_bridge/execute.py
 ```
 
 This installs: `x11vnc`, `novnc`, `xvfb`, `xdotool`, `chromium`
 
-### 3. Expose the viewer port
+### 3. Expose port 6080 and mount the data volume
 
-Add one line to your `docker-compose.yml`:
+Port 6080 is the noVNC remote viewer — it's what lets you see and control A0's browser.
+The `data/` volume mount ensures cookies, sessions, and recorded playbooks survive container rebuilds.
+
+#### Option A — docker-compose (recommended)
+
+A ready-to-use `docker-compose.yml` is included at the repo root. Copy it and adjust paths:
+
+```bash
+cp docker-compose.yml /path/to/your/a0/docker-compose.yml
+```
+
+Or add these two lines to your existing compose file:
 
 ```yaml
 services:
-  agent-zero:
+  agent-zero:          # ← your container's service name; change if different
     ports:
       - "5050:5000"
       - "6080:6080"    # Phantom Bridge remote viewer
+    volumes:
+      - ./a0-data/usr:/a0/usr   # persists plugins, sessions, cookies
 ```
 
 Then restart: `docker compose up -d`
 
-> **Note:** If you can't change docker-compose, the plugin still works — it falls back to a screencast mode that streams through A0's existing port. No extra ports needed.
+#### Option B — docker run
+
+```bash
+docker run -d \
+  --name a0 \
+  -p 5050:5000 \
+  -p 6080:6080 \
+  -v "$(pwd)/a0-data/usr:/a0/usr" \
+  frdel/agent-zero-run:latest
+```
+
+> **Container name:** `docker exec` targets the **container name**, not the Compose service name. The container name is set by `container_name:` in `docker-compose.yml` (defaulting to something like `a0-agent-zero-1` if omitted) or by `--name` in `docker run`. The included `docker-compose.yml` sets `container_name: a0`, so `docker exec -it a0 ...` works as shown. If you omit `container_name:` or use a different value, either update the exec commands to match, or use `docker compose exec <service> ...` (e.g. `docker compose exec agent-zero ...`) which targets the service name directly and always works.
+
+> **No port 6080?** The plugin still works — it falls back to a screencast mode that streams through A0's existing port (5050). No extra ports needed. The sidebar panel automatically detects which mode is available.
 
 ### 4. Use it
 

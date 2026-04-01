@@ -20,16 +20,40 @@ logger = logging.getLogger("phantom_bridge")
 
 # URL path fragments that indicate an authentication endpoint
 _AUTH_URL_PATTERNS = frozenset(
-    ["/login", "/auth", "/oauth", "/signin", "/session", "/token",
-     "/sso", "/callback", "/saml"]
+    [
+        "/login",
+        "/auth",
+        "/oauth",
+        "/signin",
+        "/session",
+        "/token",
+        "/sso",
+        "/callback",
+        "/saml",
+    ]
 )
 
 # Cookie names commonly used for session/auth tokens
 _AUTH_COOKIE_NAMES = frozenset(
-    ["session", "sid", "token", "auth", "jwt", "_session",
-     "ssid", "SID", "SSID", "sessionid", "session_id",
-     "connect.sid", "JSESSIONID", "csrftoken", "access_token",
-     "__Secure-", "__Host-"]
+    [
+        "session",
+        "sid",
+        "token",
+        "auth",
+        "jwt",
+        "_session",
+        "ssid",
+        "SID",
+        "SSID",
+        "sessionid",
+        "session_id",
+        "connect.sid",
+        "JSESSIONID",
+        "csrftoken",
+        "access_token",
+        "__Secure-",
+        "__Host-",
+    ]
 )
 
 # Minimum cookie expiry (seconds) to consider it an auth cookie vs tracking
@@ -104,9 +128,7 @@ class AuthRegistry:
         # Take an initial cookie snapshot
         await self._snapshot_cookies()
 
-        logger.info(
-            "auth_registry: started (loaded %d entries)", len(self._registry)
-        )
+        logger.info("auth_registry: started (loaded %d entries)", len(self._registry))
 
     async def stop(self) -> None:
         """Save final state."""
@@ -195,17 +217,15 @@ class AuthRegistry:
             parsed = urlparse(url)
             domain = parsed.hostname or ""
             if domain and domain in self._registry:
-                self._registry[domain].last_seen = (
-                    datetime.now(timezone.utc).isoformat()
-                )
+                self._registry[domain].last_seen = datetime.now(
+                    timezone.utc
+                ).isoformat()
 
     # ------------------------------------------------------------------
     # Auth detection
     # ------------------------------------------------------------------
 
-    async def _detect_auth_cookies(
-        self, domain: str, cookies: list[dict]
-    ) -> None:
+    async def _detect_auth_cookies(self, domain: str, cookies: list[dict]) -> None:
         """Compare current cookies with pre-navigation snapshot.
 
         Auth indicators:
@@ -282,8 +302,7 @@ class AuthRegistry:
         )
 
         logger.info(
-            "auth_registry: authentication detected for %s "
-            "(cookies: %s)",
+            "auth_registry: authentication detected for %s (cookies: %s)",
             domain,
             ", ".join(auth_cookie_names),
         )
@@ -292,9 +311,7 @@ class AuthRegistry:
 
         # Notify listeners (e.g. WS broadcaster) without blocking detection.
         if self._auth_callback is not None:
-            asyncio.create_task(
-                self._auth_callback(domain, self._registry[domain])
-            )
+            asyncio.create_task(self._auth_callback(domain, self._registry[domain]))
 
     @staticmethod
     def _is_auth_cookie_name(name: str) -> bool:
@@ -339,6 +356,40 @@ class AuthRegistry:
     def get_all_domains(self) -> list[str]:
         """Return all tracked domain names."""
         return list(self._registry.keys())
+
+    def check_expired_sessions(self) -> dict[str, list[str]]:
+        """Return domains with expired or soon-to-expire sessions.
+
+        Returns dict with keys:
+            expired: domains whose expires_at is in the past
+            expiring_soon: domains expiring within 24 hours
+        """
+        now = datetime.now(timezone.utc)
+        expired: list[str] = []
+        expiring_soon: list[str] = []
+
+        for domain, entry in self._registry.items():
+            expires_at = entry.expires_at
+            if not expires_at:
+                continue
+            try:
+                if isinstance(expires_at, (int, float)):
+                    expiry = datetime.fromtimestamp(expires_at, tz=timezone.utc)
+                elif isinstance(expires_at, str):
+                    expiry = datetime.fromisoformat(expires_at)
+                    if expiry.tzinfo is None:
+                        expiry = expiry.replace(tzinfo=timezone.utc)
+                else:
+                    continue
+            except (ValueError, OSError):
+                continue
+
+            if expiry < now:
+                expired.append(domain)
+            elif (expiry - now).total_seconds() < 86400:
+                expiring_soon.append(domain)
+
+        return {"expired": expired, "expiring_soon": expiring_soon}
 
     async def check_session_health(self, domain: str) -> dict[str, Any]:
         """Test if a domain's session is still valid.
@@ -387,9 +438,7 @@ class AuthRegistry:
         await self._cdp.subscribe("Page.frameNavigated", on_frame_navigated)
 
         try:
-            await self._cdp.send(
-                "Page.navigate", {"url": test_url}
-            )
+            await self._cdp.send("Page.navigate", {"url": test_url})
 
             # Wait for navigation with a 10-second timeout
             try:
@@ -450,9 +499,7 @@ class AuthRegistry:
         """Persist to data/auth_registry.json."""
         try:
             self._data_dir.mkdir(parents=True, exist_ok=True)
-            data = {
-                domain: entry.to_dict() for domain, entry in self._registry.items()
-            }
+            data = {domain: entry.to_dict() for domain, entry in self._registry.items()}
             self._file_path.write_text(
                 json.dumps(data, indent=2, default=str), encoding="utf-8"
             )

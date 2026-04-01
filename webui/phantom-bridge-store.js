@@ -18,6 +18,15 @@ export const store = createStore("phantomBridge", {
     sitemapCount: 0,
     playbooks: [],
     playbookCount: 0,
+    isRecording: false,
+    recordingName: "",
+    headless: false,
+    cdpConnected: false,
+    cdpHealthy: false,
+    observerRunning: false,
+    observerError: "",
+    expiredDomains: [],
+    expiringSoonDomains: [],
 
     // Internal — not part of the public store shape
     _pollInterval: null,
@@ -93,6 +102,20 @@ export const store = createStore("phantomBridge", {
             this.novncReady = status.novnc_running || false;
             this.novncUrl = status.novnc_url || "";
             this.novncPort = status.novnc_port || 6080;
+            this.headless = status.headless || false;
+            this.cdpConnected = status.cdp_connected || false;
+            this.cdpHealthy = status.cdp_healthy || false;
+            this.observerRunning = status.observer_running || false;
+            this.observerError = status.observer_error || "";
+            this.expiredDomains = status.expired_domains || [];
+            this.expiringSoonDomains = status.expiring_soon_domains || [];
+            this.headless = status.headless || false;
+            this.cdpConnected = status.cdp_connected || false;
+            this.cdpHealthy = status.cdp_healthy || false;
+            this.observerRunning = status.observer_running || false;
+            this.observerError = status.observer_error || "";
+            this.expiredDomains = status.expired_domains || [];
+            this.expiringSoonDomains = status.expiring_soon_domains || [];
 
             // Cookie domains — read from encrypted on-disk files; no CDP roundtrip.
             const cookieData = await api("bridge", { action: "cookies" });
@@ -169,5 +192,51 @@ export const store = createStore("phantomBridge", {
         const host = location.hostname || "localhost";
         const url = `http://${host}:${this.novncPort}/vnc.html?autoconnect=true&resize=scale&reconnect=true`;
         window.open(url, "phantom-bridge");
+    },
+
+    async startRecording(name) {
+        try {
+            const { toastFrontendInfo } = await import("/components/notifications/notification-store.js");
+            toastFrontendInfo(`Recording '${name}'...`, "Phantom Bridge");
+            await api("bridge", { action: "record_start", name });
+            this.isRecording = true;
+            this.recordingName = name;
+        } catch (e) {
+            const { toastFrontendError } = await import("/components/notifications/notification-store.js");
+            toastFrontendError("Failed to start recording: " + e.message, "Phantom Bridge");
+        }
+    },
+
+    async stopRecording() {
+        try {
+            const { toastFrontendInfo, toastFrontendSuccess } = await import("/components/notifications/notification-store.js");
+            toastFrontendInfo("Stopping recording...", "Phantom Bridge");
+            const result = await api("bridge", { action: "record_stop" });
+            if (result.ok) {
+                toastFrontendSuccess(
+                    `Playbook '${result.name}' saved — ${result.steps} steps`,
+                    "Phantom Bridge"
+                );
+            }
+            this.isRecording = false;
+            this.recordingName = "";
+            await this.fetchStatus();
+        } catch (e) {
+            const { toastFrontendError } = await import("/components/notifications/notification-store.js");
+            toastFrontendError("Failed to stop recording: " + e.message, "Phantom Bridge");
+        }
+    },
+
+    async deleteDomainCookies(domain) {
+        try {
+            const { toastFrontendInfo, toastFrontendSuccess } = await import("/components/notifications/notification-store.js");
+            toastFrontendInfo(`Deleting cookies for ${domain}...`, "Phantom Bridge");
+            await api("bridge", { action: "delete_cookies", domain });
+            toastFrontendSuccess(`Cookies deleted for ${domain}`, "Phantom Bridge");
+            await this.fetchStatus();
+        } catch (e) {
+            const { toastFrontendError } = await import("/components/notifications/notification-store.js");
+            toastFrontendError("Failed to delete cookies: " + e.message, "Phantom Bridge");
+        }
     },
 });

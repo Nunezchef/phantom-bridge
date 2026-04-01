@@ -77,16 +77,24 @@ class BridgeReplay(Tool):
         profile_dir = self._get_profile_dir()
 
         if dry_run:
+            validation = await self._validate_playbook(playbook, profile_dir)
             script = playbook.to_playwright_script(profile_dir=profile_dir)
-            return Response(
-                message=(
-                    f"Playwright script for '{playbook.name}' "
-                    f"({len(playbook.steps)} steps):\n\n"
-                    f"```python\n{script}\n```\n\n"
-                    "Review and execute this script to replay the workflow."
-                ),
-                break_loop=False,
-            )
+            msg_parts = [
+                f"Playwright script for '{playbook.name}' "
+                f"({len(playbook.steps)} steps):\n\n"
+                f"```python\n{script}\n```\n\n"
+                "Review and execute this script to replay the workflow.",
+            ]
+            if validation["errors"]:
+                msg_parts.insert(
+                    0,
+                    f"Validation warnings for '{playbook.name}':\n"
+                    + "\n".join(f"  - {e}" for e in validation["errors"])
+                    + "\n",
+                )
+            else:
+                msg_parts.insert(0, f"Validation passed for '{playbook.name}'.\n")
+            return Response(message="\n".join(msg_parts), break_loop=False)
 
         # Live replay via Playwright
         return await self._replay_live(playbook, profile_dir)
@@ -402,6 +410,164 @@ class BridgeReplay(Tool):
             pass
 
         return None
+
+    async def _validate_playbook(self, playbook: Any, profile_dir: str) -> dict:
+        """Validate a playbook before replay.
+
+        Checks:
+        1. First navigation target is reachable
+        2. Key selectors from first 3 interaction steps exist on the page
+        Returns {"errors": [str], "warnings": [str]}
+        """
+        errors: list[str] = []
+        warnings: list[str] = []
+
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            warnings.append("Playwright not installed — skipping validation")
+            return {"errors": errors, "warnings": warnings}
+
+        nav_steps = [s for s in playbook.steps if s.action == "navigate" and s.url]
+        if not nav_steps:
+            warnings.append("No navigation step found — cannot validate target URL")
+            return {"errors": errors, "warnings": warnings}
+
+        first_url = nav_steps[0].url
+        interaction_steps = [
+            s
+            for s in playbook.steps[:10]
+            if s.action in ("click", "type", "select", "submit") and s.selector
+        ]
+
+        try:
+            async with async_playwright() as pw:
+                profile_path = Path(profile_dir)
+                profile_path.mkdir(parents=True, exist_ok=True)
+                context = await pw.chromium.launch_persistent_context(
+                    str(profile_path),
+                    headless=True,
+                    viewport={"width": 1280, "height": 900},
+                )
+                page = context.pages[0] if context.pages else await context.new_page()
+
+                try:
+                    await page.goto(first_url, wait_until="networkidle", timeout=30000)
+                except Exception as exc:
+                    errors.append(f"Navigation to {first_url} failed: {exc}")
+                    await context.close()
+                    return {"errors": errors, "warnings": warnings}
+
+                for step in interaction_steps[:3]:
+                    try:
+                        loc = page.locator(step.selector)
+                        count = await loc.count()
+                        if count == 0:
+                            fallbacks = []
+                            if step.text:
+                                fallbacks.append(f"text={step.text}")
+                            if step.aria_role:
+                                fallbacks.append(f"role={step.aria_role}")
+                            if step.aria_label:
+                                fallbacks.append(f"aria-label={step.aria_label}")
+                            if step.placeholder:
+                                fallbacks.append(f"placeholder={step.placeholder}")
+                            warnings.append(
+                                f"Selector '{step.selector}' not found "
+                                f"(step: {step.action})"
+                                + (
+                                    f", fallbacks available: {', '.join(fallbacks)}"
+                                    if fallbacks
+                                    else ""
+                                )
+                            )
+                    except Exception:
+                        pass
+
+                await context.close()
+        except Exception as exc:
+            warnings.append(f"Validation failed: {exc}")
+
+        return {"errors": errors, "warnings": warnings}
+
+    async def _validate_playbook(self, playbook: Any, profile_dir: str) -> dict:
+        """Validate a playbook before replay.
+
+        Checks:
+        1. First navigation target is reachable
+        2. Key selectors from first 3 interaction steps exist on the page
+        Returns {"errors": [str], "warnings": [str]}
+        """
+        errors: list[str] = []
+        warnings: list[str] = []
+
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            warnings.append("Playwright not installed — skipping validation")
+            return {"errors": errors, "warnings": warnings}
+
+        nav_steps = [s for s in playbook.steps if s.action == "navigate" and s.url]
+        if not nav_steps:
+            warnings.append("No navigation step found — cannot validate target URL")
+            return {"errors": errors, "warnings": warnings}
+
+        first_url = nav_steps[0].url
+        interaction_steps = [
+            s
+            for s in playbook.steps[:10]
+            if s.action in ("click", "type", "select", "submit") and s.selector
+        ]
+
+        try:
+            async with async_playwright() as pw:
+                profile_path = Path(profile_dir)
+                profile_path.mkdir(parents=True, exist_ok=True)
+                context = await pw.chromium.launch_persistent_context(
+                    str(profile_path),
+                    headless=True,
+                    viewport={"width": 1280, "height": 900},
+                )
+                page = context.pages[0] if context.pages else await context.new_page()
+
+                try:
+                    await page.goto(first_url, wait_until="networkidle", timeout=30000)
+                except Exception as exc:
+                    errors.append(f"Navigation to {first_url} failed: {exc}")
+                    await context.close()
+                    return {"errors": errors, "warnings": warnings}
+
+                for step in interaction_steps[:3]:
+                    try:
+                        loc = page.locator(step.selector)
+                        count = await loc.count()
+                        if count == 0:
+                            fallbacks = []
+                            if step.text:
+                                fallbacks.append(f"text={step.text}")
+                            if step.aria_role:
+                                fallbacks.append(f"role={step.aria_role}")
+                            if step.aria_label:
+                                fallbacks.append(f"aria-label={step.aria_label}")
+                            if step.placeholder:
+                                fallbacks.append(f"placeholder={step.placeholder}")
+                            warnings.append(
+                                f"Selector '{step.selector}' not found "
+                                f"(step: {step.action})"
+                                + (
+                                    f", fallbacks available: {', '.join(fallbacks)}"
+                                    if fallbacks
+                                    else ""
+                                )
+                            )
+                    except Exception:
+                        pass
+
+                await context.close()
+        except Exception as exc:
+            warnings.append(f"Validation failed: {exc}")
+
+        return {"errors": errors, "warnings": warnings}
 
     def _get_profile_dir(self) -> str:
         """Resolve the bridge's profile directory."""

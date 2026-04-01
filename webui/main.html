@@ -40,11 +40,32 @@
         }
         .pb-stop-btn:hover { background: #ef444433; }
 
+        .pb-rec-btn {
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            width: 100%; padding: 10px 16px; font-size: 0.85em; font-weight: 600;
+            border-radius: 10px; cursor: pointer; transition: all 0.2s;
+        }
+        .pb-rec-start {
+            background: #f59e0b22; border: 1px solid #f59e0b44; color: #f59e0b;
+        }
+        .pb-rec-start:hover { background: #f59e0b33; }
+        .pb-rec-stop {
+            background: #ef444422; border: 1px solid #ef444444; color: #ef4444;
+            animation: pb-pulse 2s infinite;
+        }
+        @keyframes pb-pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+
         .pb-auth-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 0.85em; }
         .pb-auth-domain { font-weight: 600; }
         .pb-auth-status { font-size: 0.75em; opacity: 0.5; }
         .pb-section-title { font-size: 0.9em; font-weight: 600; margin-bottom: 8px; }
         .pb-empty { font-size: 0.8em; opacity: 0.4; font-style: italic; }
+        .pb-warn { font-size: 0.75em; color: #f59e0b; margin-top: 4px; }
+        .pb-del-btn { background:none; border:none; color:#ef444488; cursor:pointer; font-size:0.7em; padding:2px 6px; border-radius:4px; }
+        .pb-del-btn:hover { background:#ef444422; color:#ef4444; }
+        .pb-warn { font-size: 0.75em; color: #f59e0b; margin-top: 4px; }
+        .pb-del-btn { background:none; border:none; color:#ef444488; cursor:pointer; font-size:0.7em; padding:2px 6px; border-radius:4px; }
+        .pb-del-btn:hover { background:#ef444422; color:#ef4444; }
     </style>
 </head>
 <body>
@@ -92,6 +113,128 @@
                     </button>
                 </template>
 
+                <!-- Connection Health (when running) -->
+                <template x-if="$store.phantomBridge.running">
+                    <div class="pb-card" style="margin-top:12px; padding:10px 16px;">
+                        <div style="display:flex; flex-wrap:wrap; gap:12px; font-size:0.8em;">
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <span class="pb-dot" :class="$store.phantomBridge.cdpConnected ? 'pb-dot-on' : 'pb-dot-off'"></span>
+                                <span>CDP</span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <span class="pb-dot" :class="$store.phantomBridge.cdpHealthy ? 'pb-dot-on' : 'pb-dot-off'"></span>
+                                <span>CDP Healthy</span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <span class="pb-dot" :class="$store.phantomBridge.observerRunning ? 'pb-dot-on' : 'pb-dot-off'"></span>
+                                <span>Observer</span>
+                            </div>
+                            <template x-if="$store.phantomBridge.headless">
+                                <span style="opacity:0.5;">Headless</span>
+                            </template>
+                        </div>
+                        <template x-if="$store.phantomBridge.observerError">
+                            <p class="pb-warn" style="margin:4px 0 0;" x-text="'Observer: ' + $store.phantomBridge.observerError"></p>
+                        </template>
+                        <template x-if="$store.phantomBridge.expiredDomains.length > 0">
+                            <p class="pb-warn" x-text="'Expired: ' + $store.phantomBridge.expiredDomains.join(', ')"></p>
+                        </template>
+                        <template x-if="$store.phantomBridge.expiringSoonDomains.length > 0">
+                            <p class="pb-warn" x-text="'Expiring soon: ' + $store.phantomBridge.expiringSoonDomains.join(', ')"></p>
+                        </template>
+                    </div>
+                </template>
+
+                <!-- Recording Controls (when running) -->
+                <template x-if="$store.phantomBridge.running">
+                    <div class="pb-card" style="margin-top:12px;">
+                        <div class="pb-section-title" style="margin-bottom:8px;">
+                            Recording
+                            <template x-if="$store.phantomBridge.isRecording">
+                                <span style="color:#f59e0b; font-weight:400;" x-text="' — ' + $store.phantomBridge.recordingName"></span>
+                            </template>
+                        </div>
+                        <template x-if="!$store.phantomBridge.isRecording">
+                            <div style="display:flex; gap:8px;">
+                                <input x-model="_recName" type="text" placeholder="Playbook name..."
+                                       style="flex:1; padding:8px 12px; border-radius:8px; border:1px solid color-mix(in srgb, currentColor 15%, transparent); background:transparent; color:inherit; font-size:0.85em;">
+                                <button class="pb-rec-btn pb-rec-start"
+                                        @click="$store.phantomBridge.startRecording($store.phantomBridge._recName || 'workflow')">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+                                    Record
+                                </button>
+                            </div>
+                        </template>
+                        <template x-if="$store.phantomBridge.isRecording">
+                            <button class="pb-rec-btn pb-rec-stop" @click="$store.phantomBridge.stopRecording()">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                                Stop Recording
+                            </button>
+                        </template>
+                    </div>
+                </template>
+
+                <!-- Connection Health (when running) -->
+                <template x-if="$store.phantomBridge.running">
+                    <div class="pb-card" style="margin-top:12px; padding:10px 16px;">
+                        <div style="display:flex; flex-wrap:wrap; gap:12px; font-size:0.8em;">
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <span class="pb-dot" :class="$store.phantomBridge.cdpConnected ? 'pb-dot-on' : 'pb-dot-off'"></span>
+                                <span>CDP</span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <span class="pb-dot" :class="$store.phantomBridge.cdpHealthy ? 'pb-dot-on' : 'pb-dot-off'"></span>
+                                <span>CDP Healthy</span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <span class="pb-dot" :class="$store.phantomBridge.observerRunning ? 'pb-dot-on' : 'pb-dot-off'"></span>
+                                <span>Observer</span>
+                            </div>
+                            <template x-if="$store.phantomBridge.headless">
+                                <span style="opacity:0.5;">Headless</span>
+                            </template>
+                        </div>
+                        <template x-if="$store.phantomBridge.observerError">
+                            <p class="pb-warn" style="margin:4px 0 0;" x-text="'Observer: ' + $store.phantomBridge.observerError"></p>
+                        </template>
+                        <template x-if="$store.phantomBridge.expiredDomains.length > 0">
+                            <p class="pb-warn" x-text="'Expired: ' + $store.phantomBridge.expiredDomains.join(', ')"></p>
+                        </template>
+                        <template x-if="$store.phantomBridge.expiringSoonDomains.length > 0">
+                            <p class="pb-warn" x-text="'Expiring soon: ' + $store.phantomBridge.expiringSoonDomains.join(', ')"></p>
+                        </template>
+                    </div>
+                </template>
+
+                <!-- Recording Controls (when running) -->
+                <template x-if="$store.phantomBridge.running">
+                    <div class="pb-card" style="margin-top:12px;">
+                        <div class="pb-section-title" style="margin-bottom:8px;">
+                            Recording
+                            <template x-if="$store.phantomBridge.isRecording">
+                                <span style="color:#f59e0b; font-weight:400;" x-text="' — ' + $store.phantomBridge.recordingName"></span>
+                            </template>
+                        </div>
+                        <template x-if="!$store.phantomBridge.isRecording">
+                            <div style="display:flex; gap:8px;">
+                                <input x-model="_recName" type="text" placeholder="Playbook name..."
+                                       style="flex:1; padding:8px 12px; border-radius:8px; border:1px solid color-mix(in srgb, currentColor 15%, transparent); background:transparent; color:inherit; font-size:0.85em;">
+                                <button class="pb-rec-btn pb-rec-start"
+                                        @click="$store.phantomBridge.startRecording($store.phantomBridge._recName || 'workflow')">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+                                    Record
+                                </button>
+                            </div>
+                        </template>
+                        <template x-if="$store.phantomBridge.isRecording">
+                            <button class="pb-rec-btn pb-rec-stop" @click="$store.phantomBridge.stopRecording()">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                                Stop Recording
+                            </button>
+                        </template>
+                    </div>
+                </template>
+
                 <!-- Cookies / Authenticated Domains -->
                 <div class="pb-card" style="margin-top: 12px;">
                     <div style="display:flex; align-items:center; justify-content:space-between;">
@@ -113,8 +256,11 @@
                                     <span class="pb-dot pb-dot-on"></span>
                                     <span class="pb-auth-domain" x-text="entry.domain"></span>
                                     <span class="pb-mono" style="opacity:0.4;" x-text="entry.count + ' cookies'"></span>
+                                    <button class="pb-del-btn" @click="$store.phantomBridge.deleteDomainCookies(entry.domain)" title="Delete cookies for this domain">✕</button>
                                 </div>
                             </template>
+                        </div>
+                    </template>
                         </div>
                     </template>
                     <template x-if="$store.phantomBridge.cookieDomains.length === 0">

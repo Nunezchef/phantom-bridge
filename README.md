@@ -10,7 +10,7 @@
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python 3.10+"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License"></a>
   <a href="https://github.com/frdel/agent-zero"><img src="https://img.shields.io/badge/Agent_Zero-plugin-orange.svg" alt="A0 Compatible"></a>
-  <a href="#"><img src="https://img.shields.io/badge/version-1.1.1-purple.svg" alt="Version 1.1.1"></a>
+  <a href="#"><img src="https://img.shields.io/badge/version-1.2.0-purple.svg" alt="Version 1.2.0"></a>
 </p>
 
 <p align="center">
@@ -20,7 +20,13 @@
 
 ---
 
-## What's New in v1.1.1
+## What's New in v1.2.0
+
+- **Robust playbook replay** — Recorded playbooks now capture multiple locator strategies per step (CSS selector, visible text, ARIA role, aria-label, placeholder, label text, input type). During replay, if an exact selector breaks (dynamic class names, hashed IDs, SPA re-renders), the engine falls back through alternative strategies automatically.
+- **Agent-guided instructions** — New `Playbook.to_agent_instructions()` generates natural-language workflow descriptions with prioritized locator hints, letting A0 reason about element location instead of blindly executing brittle scripts.
+- **Recording UI** — Start and stop playbook recordings directly from the sidebar panel with real-time notifications and an A0 progress bar.
+
+### v1.1.1
 
 - **WebSocket push events** — Bridge status and auth events are pushed to the UI in real time. No more 5-second polling.
 - **Self-correction error messages** — All tool error paths now include canonical JSON call examples so A0 v1.5 agents can fix malformed calls automatically.
@@ -125,12 +131,12 @@ that session afterward."
 Teach A0 once, it does it forever:
 
 1. Open the bridge
-2. Tell A0: *"Record this — I'll show you how to generate images on Gemini"*
+2. Tell A0: *"Record this — I'll show you how to generate images on Gemini"* (or click **Start Recording** in the sidebar)
 3. Walk through the workflow in the remote viewer
-4. Tell A0: *"Stop recording"*
+4. Tell A0: *"Stop recording"* (or click **Stop Recording** in the sidebar)
 5. From now on: *"Generate images on Gemini like I showed you"*
 
-A0 replays the recorded workflow autonomously using Playwright with the shared browser profile.
+A0 replays the recorded workflow autonomously using Playwright with the shared browser profile. Each step captures **6 locator strategies** — so when CSS selectors break (dynamic classes, hashed IDs, SPA re-renders), replay falls back through text, ARIA role, aria-label, placeholder, and label matches automatically.
 
 ---
 

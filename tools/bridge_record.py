@@ -16,7 +16,6 @@ logger = logging.getLogger("phantom_bridge")
 
 
 class BridgeRecord(Tool):
-
     async def execute(self, **kwargs: Any) -> Response:
         action = self.args.get("action", "").lower()
         name = self.args.get("name", "")
@@ -74,6 +73,15 @@ class BridgeRecord(Tool):
         except ValueError as e:
             return Response(message=f"Invalid name: {e}", break_loop=False)
 
+        # Set A0 progress bar to show recording state with shiny animation
+        try:
+            self.agent.context.log.set_progress(
+                f"Recording: {name} — navigate through the workflow",
+                progress_active=True,
+            )
+        except Exception:
+            pass
+
         return Response(
             message=(
                 f"Recording started: '{recorder._current_name}'\n\n"
@@ -88,6 +96,36 @@ class BridgeRecord(Tool):
             playbook = await recorder.stop_recording(description=description)
         except RuntimeError as e:
             return Response(message=f"Cannot stop recording: {e}", break_loop=False)
+
+        # Clear A0 progress bar — recording finished
+        try:
+            self.agent.context.log.set_initial_progress()
+        except Exception:
+            pass
+
+        # Send A0 notification so user sees a toast when playbook is saved
+        try:
+            from helpers.notification import (  # type: ignore
+                NotificationManager,
+                NotificationType,
+                NotificationPriority,
+            )
+
+            NotificationManager.send_notification(
+                type=NotificationType.SUCCESS,
+                priority=NotificationPriority.HIGH,
+                title="Phantom Bridge",
+                message=f"Playbook '{playbook.name}' saved",
+                detail=(
+                    f"Domain: {playbook.domain}\n"
+                    f"Steps: {len(playbook.steps)}\n"
+                    f"Duration: {playbook.duration_ms / 1000:.1f}s"
+                ),
+                display_time=8,
+                group="phantom_bridge_playbook",
+            )
+        except Exception:
+            pass
 
         return Response(
             message=(
@@ -145,6 +183,7 @@ class BridgeRecord(Tool):
         """Get the PlaybookRecorder instance from the bridge plugin."""
         try:
             from usr.plugins.phantom_bridge.bridge import get_bridge
+
             bridge = get_bridge()
             if bridge and hasattr(bridge, "_playbook_recorder"):
                 return bridge._playbook_recorder
@@ -164,7 +203,9 @@ class BridgeRecord(Tool):
     def get_log_object(self):
         action = self.args.get("action", "unknown")
         name = self.args.get("name", "")
-        heading = f"icon://radio_button_checked {self.agent.agent_name}: Playbook Record"
+        heading = (
+            f"icon://radio_button_checked {self.agent.agent_name}: Playbook Record"
+        )
         if action == "start" and name:
             heading += f" — start '{name}'"
         elif action == "stop":

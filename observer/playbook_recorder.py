@@ -36,11 +36,27 @@ def _safe_str(s: str) -> str:
     """
     return s.encode("utf-8", errors="replace").decode("utf-8")
 
+
 # File extensions to ignore when recording network requests
-_STATIC_EXTENSIONS = frozenset({
-    ".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
-    ".woff", ".woff2", ".ttf", ".eot", ".map", ".webp", ".avif",
-})
+_STATIC_EXTENSIONS = frozenset(
+    {
+        ".js",
+        ".css",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".svg",
+        ".ico",
+        ".woff",
+        ".woff2",
+        ".ttf",
+        ".eot",
+        ".map",
+        ".webp",
+        ".avif",
+    }
+)
 
 # HTTP methods worth recording (skip GET — too noisy)
 _RECORDED_METHODS = frozenset({"POST", "PUT", "DELETE", "PATCH"})
@@ -107,16 +123,42 @@ _DOM_HOOK_JS = r"""
         try { window.__phantomBridge(JSON.stringify(data)); } catch(e) {}
     }
 
+// ---- locator metadata: captures multiple strategies for robust replay ----
+function getLocatorInfo(el) {
+    var info = {};
+    info.tag = el.tagName ? el.tagName.toLowerCase() : '';
+    info.role = el.getAttribute('role') || '';
+    info.ariaLabel = el.getAttribute('aria-label') || '';
+    info.placeholder = el.getAttribute('placeholder') || '';
+    // For labels, look at associated <label> element
+    if (el.id) {
+        var label = document.querySelector('label[for="' + el.id + '"]');
+        if (label) info.labelText = (label.innerText || '').trim().substring(0, 50);
+    }
+    // For inputs without id, check parent label
+    if (!info.labelText && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) {
+        var parentLabel = el.closest('label');
+        if (parentLabel) info.labelText = (parentLabel.innerText || '').trim().substring(0, 50);
+    }
+    return info;
+}
+
     // ---- click handler ----
     document.addEventListener('click', function(e) {
         var target = closestInteractive(e.target);
         if (!target) return;
         var text = (target.innerText || '').trim().substring(0, 50);
+        var loc = getLocatorInfo(target);
         send({
             type: 'click',
             selector: buildSelector(target),
             text: text,
-            url: location.href
+            url: location.href,
+            tag: loc.tag,
+            role: loc.role,
+            ariaLabel: loc.ariaLabel,
+            placeholder: loc.placeholder,
+            labelText: loc.labelText || null
         });
     }, true);
 
@@ -136,11 +178,18 @@ _DOM_HOOK_JS = r"""
             var val = target.value || '';
             // Mask passwords — never record actual password values
             if (target.type === 'password') val = '***';
+            var loc = getLocatorInfo(target);
             send({
                 type: 'type',
                 selector: sel,
                 value: val,
-                url: location.href
+                url: location.href,
+                tag: loc.tag,
+                role: loc.role,
+                ariaLabel: loc.ariaLabel,
+                placeholder: target.getAttribute('placeholder') || '',
+                inputType: target.type || '',
+                labelText: loc.labelText || null
             });
         }, 500);
     }, true);
@@ -149,11 +198,16 @@ _DOM_HOOK_JS = r"""
     document.addEventListener('change', function(e) {
         var target = e.target;
         if (!target || target.tagName !== 'SELECT') return;
+        var loc = getLocatorInfo(target);
         send({
             type: 'select',
             selector: buildSelector(target),
             value: target.value || '',
-            url: location.href
+            url: location.href,
+            tag: loc.tag,
+            role: loc.role,
+            ariaLabel: loc.ariaLabel,
+            labelText: loc.labelText || null
         });
     }, true);
 
@@ -165,12 +219,17 @@ _DOM_HOOK_JS = r"""
         var btn = form.querySelector('[type="submit"]') || form.querySelector('button');
         var sel = btn ? buildSelector(btn) : buildSelector(form);
         var text = btn ? (btn.innerText || '').trim().substring(0, 50) : '';
+        var loc = btn ? getLocatorInfo(btn) : {};
         send({
             type: 'submit',
             selector: sel,
             text: text,
             value: form.action || '',
-            url: location.href
+            url: location.href,
+            tag: loc.tag || 'form',
+            role: loc.role || '',
+            ariaLabel: loc.ariaLabel || '',
+            labelText: loc.labelText || null
         });
     }, true);
 })();
@@ -247,15 +306,11 @@ class PlaybookRecorder:
 
         # Register the __phantomBridge binding for DOM interaction capture
         try:
-            await self._cdp.send(
-                "Runtime.addBinding", {"name": "__phantomBridge"}
-            )
+            await self._cdp.send("Runtime.addBinding", {"name": "__phantomBridge"})
         except RuntimeError as exc:
             # Binding may already exist from a previous recording
             if "bindingCalled" not in str(exc).lower():
-                logger.debug(
-                    "playbook_recorder: addBinding note: %s", exc
-                )
+                logger.debug("playbook_recorder: addBinding note: %s", exc)
 
         # Inject the DOM hook into the current page
         await self._inject_dom_hook()
@@ -265,20 +320,12 @@ class PlaybookRecorder:
         await self._cdp.subscribe(
             "Page.navigatedWithinDocument", self._on_spa_navigation
         )
-        await self._cdp.subscribe(
-            "Network.requestWillBeSent", self._on_network_request
-        )
-        await self._cdp.subscribe(
-            "Network.responseReceived", self._on_network_response
-        )
+        await self._cdp.subscribe("Network.requestWillBeSent", self._on_network_request)
+        await self._cdp.subscribe("Network.responseReceived", self._on_network_response)
         # Re-inject DOM hook after every page load (navigations unload scripts)
-        await self._cdp.subscribe(
-            "Page.loadEventFired", self._on_page_load_reinject
-        )
+        await self._cdp.subscribe("Page.loadEventFired", self._on_page_load_reinject)
         # Receive DOM interaction events from the injected JS hook
-        await self._cdp.subscribe(
-            "Runtime.bindingCalled", self._on_binding_called
-        )
+        await self._cdp.subscribe("Runtime.bindingCalled", self._on_binding_called)
 
         logger.info("playbook_recorder: recording started — '%s'", slug)
 
@@ -314,6 +361,25 @@ class PlaybookRecorder:
             duration_ms,
         )
 
+        # Push notification to UI via WebSocket
+        try:
+            from usr.plugins.phantom_bridge.ws_broadcast import (
+                broadcast as _ws_broadcast,
+            )
+
+            await _ws_broadcast(
+                "phantom_bridge_playbook",
+                {
+                    "name": playbook.name,
+                    "domain": playbook.domain,
+                    "steps": step_count,
+                    "duration_ms": duration_ms,
+                    "description": playbook.description or "",
+                },
+            )
+        except Exception as exc:
+            logger.debug("playbook_recorder: ws_broadcast failed: %s", exc)
+
         # Reset state
         self._current_steps = []
         self._current_name = None
@@ -344,11 +410,13 @@ class PlaybookRecorder:
         if not self._current_domain and "://" in url:
             self._current_domain = url.split("://", 1)[1].split("/", 1)[0]
 
-        self._add_step(PlaybookStep(
-            action="navigate",
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            url=url,
-        ))
+        self._add_step(
+            PlaybookStep(
+                action="navigate",
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                url=url,
+            )
+        )
 
     async def _on_spa_navigation(self, params: dict[str, Any]) -> None:
         """Record SPA (single-page app) navigation."""
@@ -359,11 +427,13 @@ class PlaybookRecorder:
         if not url:
             return
 
-        self._add_step(PlaybookStep(
-            action="navigate",
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            url=url,
-        ))
+        self._add_step(
+            PlaybookStep(
+                action="navigate",
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                url=url,
+            )
+        )
 
     async def _on_network_request(self, params: dict[str, Any]) -> None:
         """Record significant network requests (POST/PUT/DELETE/PATCH only).
@@ -395,13 +465,15 @@ class PlaybookRecorder:
                 content_type = v
                 break
 
-        self._add_step(PlaybookStep(
-            action="request",
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            url=url,
-            method=method,
-            content_type=content_type or None,
-        ))
+        self._add_step(
+            PlaybookStep(
+                action="request",
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                url=url,
+                method=method,
+                content_type=content_type or None,
+            )
+        )
 
     async def _on_network_response(self, params: dict[str, Any]) -> None:
         """Detect file downloads via Content-Disposition header."""
@@ -430,12 +502,14 @@ class PlaybookRecorder:
 
         url = response.get("url", "")
 
-        self._add_step(PlaybookStep(
-            action="download",
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            url=url,
-            value=filename,
-        ))
+        self._add_step(
+            PlaybookStep(
+                action="download",
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                url=url,
+                value=filename,
+            )
+        )
 
     # ------------------------------------------------------------------
     # DOM interaction handlers
@@ -454,9 +528,7 @@ class PlaybookRecorder:
             )
             logger.debug("playbook_recorder: DOM hook injected")
         except Exception as exc:
-            logger.warning(
-                "playbook_recorder: failed to inject DOM hook: %s", exc
-            )
+            logger.warning("playbook_recorder: failed to inject DOM hook: %s", exc)
 
     async def _on_page_load_reinject(self, params: dict[str, Any]) -> None:
         """Re-inject the DOM hook after every page load.
@@ -508,41 +580,75 @@ class PlaybookRecorder:
         value = _safe_str(raw_value) if raw_value is not None else None
         url = _safe_str(raw_url) if raw_url else None
 
+        # Capture locator metadata for robust replay
+        tag = _safe_str(data.get("tag", "")) or None
+        role = _safe_str(data.get("role", "")) or None
+        aria_label = _safe_str(data.get("ariaLabel", "")) or None
+        placeholder = _safe_str(data.get("placeholder", "")) or None
+        label_text = _safe_str(data["labelText"]) if data.get("labelText") else None
+
         now_iso = datetime.now(timezone.utc).isoformat()
 
         if event_type == "click":
-            self._add_step(PlaybookStep(
-                action="click",
-                timestamp=now_iso,
-                selector=selector,
-                text=text,
-                url=url,
-            ))
+            self._add_step(
+                PlaybookStep(
+                    action="click",
+                    timestamp=now_iso,
+                    selector=selector,
+                    text=text,
+                    url=url,
+                    tag=tag,
+                    role=role,
+                    aria_label=aria_label,
+                    label_text=label_text,
+                )
+            )
         elif event_type == "type":
-            self._add_step(PlaybookStep(
-                action="type",
-                timestamp=now_iso,
-                selector=selector,
-                value=value or "",
-                url=url,
-            ))
+            input_type = _safe_str(data.get("inputType", "")) or None
+            self._add_step(
+                PlaybookStep(
+                    action="type",
+                    timestamp=now_iso,
+                    selector=selector,
+                    value=value or "",
+                    url=url,
+                    tag=tag,
+                    role=role,
+                    aria_label=aria_label,
+                    placeholder=placeholder,
+                    label_text=label_text,
+                    input_type=input_type,
+                )
+            )
         elif event_type == "select":
-            self._add_step(PlaybookStep(
-                action="select",
-                timestamp=now_iso,
-                selector=selector,
-                value=value or "",
-                url=url,
-            ))
+            self._add_step(
+                PlaybookStep(
+                    action="select",
+                    timestamp=now_iso,
+                    selector=selector,
+                    value=value or "",
+                    url=url,
+                    tag=tag,
+                    role=role,
+                    aria_label=aria_label,
+                    label_text=label_text,
+                )
+            )
         elif event_type == "submit":
-            self._add_step(PlaybookStep(
-                action="submit",
-                timestamp=now_iso,
-                selector=selector,
-                text=text,
-                value=value,
-                url=url,
-            ))
+            self._add_step(
+                PlaybookStep(
+                    action="submit",
+                    timestamp=now_iso,
+                    selector=selector,
+                    text=text,
+                    value=value,
+                    url=url,
+                    tag=tag,
+                    role=role,
+                    aria_label=aria_label,
+                    label_text=label_text,
+                )
+            )
 
     # ------------------------------------------------------------------
     # Playbook management

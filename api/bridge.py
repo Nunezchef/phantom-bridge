@@ -11,7 +11,6 @@ _plugin_root = Path(__file__).resolve().parent.parent
 
 
 class BridgeHandler(ApiHandler):
-
     async def handle_request(self, request: Request) -> Response:
         """Override to add Cache-Control: no-store on all responses.
 
@@ -39,6 +38,10 @@ class BridgeHandler(ApiHandler):
             return self._get_sitemaps()
         elif action == "playbooks":
             return self._get_playbooks()
+        elif action == "record_start":
+            return await self._record_start(input)
+        elif action == "record_stop":
+            return await self._record_stop()
         elif action == "cookies":
             return self._get_cookies()
         elif action == "export_cookies":
@@ -51,6 +54,7 @@ class BridgeHandler(ApiHandler):
 
     def _status(self) -> dict:
         from usr.plugins.phantom_bridge.bridge import get_bridge
+
         bridge = get_bridge()
         if bridge and bridge.is_running():
             status = bridge.status()
@@ -58,10 +62,19 @@ class BridgeHandler(ApiHandler):
         return {"ok": True, "running": False}
 
     async def _start(self, input: dict) -> dict:
-        from usr.plugins.phantom_bridge.bridge import get_bridge, create_bridge_from_config
+        from usr.plugins.phantom_bridge.bridge import (
+            get_bridge,
+            create_bridge_from_config,
+        )
+
         bridge = get_bridge()
         if bridge and bridge.is_running():
-            return {"ok": True, "running": True, "message": "Already running", **bridge.status()}
+            return {
+                "ok": True,
+                "running": True,
+                "message": "Already running",
+                **bridge.status(),
+            }
 
         config = input.get("config", {})
         bridge = create_bridge_from_config(config)
@@ -73,6 +86,7 @@ class BridgeHandler(ApiHandler):
 
     async def _stop(self) -> dict:
         from usr.plugins.phantom_bridge.bridge import get_bridge
+
         bridge = get_bridge()
         if not bridge or not bridge.is_running():
             return {"ok": True, "running": False, "message": "Not running"}
@@ -107,12 +121,14 @@ class BridgeHandler(ApiHandler):
             for f in playbooks_dir.glob("*.json"):
                 try:
                     pb = json.loads(f.read_text())
-                    result.append({
-                        "name": pb.get("name", f.stem),
-                        "domain": pb.get("domain", ""),
-                        "steps": len(pb.get("steps", [])),
-                        "recorded_at": pb.get("recorded_at", ""),
-                    })
+                    result.append(
+                        {
+                            "name": pb.get("name", f.stem),
+                            "domain": pb.get("domain", ""),
+                            "steps": len(pb.get("steps", [])),
+                            "recorded_at": pb.get("recorded_at", ""),
+                        }
+                    )
                 except Exception:
                     pass
         return {"ok": True, "playbooks": result}
@@ -120,6 +136,7 @@ class BridgeHandler(ApiHandler):
     def _get_cookies(self) -> dict:
         """Return cookie counts per domain from encrypted per-domain files."""
         from usr.plugins.phantom_bridge.cookie_crypt import get_cookie_summary
+
         summary = get_cookie_summary()
         return {
             "ok": True,
@@ -133,22 +150,31 @@ class BridgeHandler(ApiHandler):
             import asyncio
             import websockets
 
-            with urllib.request.urlopen("http://127.0.0.1:9222/json", timeout=3) as resp:
+            with urllib.request.urlopen(
+                "http://127.0.0.1:9222/json", timeout=3
+            ) as resp:
                 targets = json.loads(resp.read().decode())
-            ws_url = next((t["webSocketDebuggerUrl"] for t in targets if t.get("type") == "page"), None)
+            ws_url = next(
+                (t["webSocketDebuggerUrl"] for t in targets if t.get("type") == "page"),
+                None,
+            )
             if not ws_url:
                 return {"ok": False, "error": "No page target"}
 
             async with websockets.connect(ws_url) as ws:
                 responses = {}
+
                 async def recv():
                     async for raw in ws:
                         msg = json.loads(raw)
-                        if "id" in msg: responses[msg["id"]] = msg
+                        if "id" in msg:
+                            responses[msg["id"]] = msg
+
                 listener = asyncio.create_task(recv())
                 await ws.send(json.dumps({"id": 1, "method": "Network.getAllCookies"}))
                 for _ in range(50):
-                    if 1 in responses: break
+                    if 1 in responses:
+                        break
                     await asyncio.sleep(0.1)
                 listener.cancel()
                 cookies = responses.get(1, {}).get("result", {}).get("cookies", [])
@@ -157,22 +183,31 @@ class BridgeHandler(ApiHandler):
             for c in cookies:
                 d = c.get("domain", "").lstrip(".")
                 if d:
-                    by_domain.setdefault(d, []).append({
-                        "name": c.get("name"), "value": c.get("value"),
-                        "domain": c.get("domain"), "path": c.get("path", "/"),
-                        "expires": c.get("expires", -1),
-                        "httpOnly": c.get("httpOnly", False),
-                        "secure": c.get("secure", False),
-                    })
+                    by_domain.setdefault(d, []).append(
+                        {
+                            "name": c.get("name"),
+                            "value": c.get("value"),
+                            "domain": c.get("domain"),
+                            "path": c.get("path", "/"),
+                            "expires": c.get("expires", -1),
+                            "httpOnly": c.get("httpOnly", False),
+                            "secure": c.get("secure", False),
+                        }
+                    )
 
             # Only save if we actually got cookies — don't overwrite
             # existing data when Chrome just restarted and cookies aren't loaded yet
             if by_domain:
                 from usr.plugins.phantom_bridge.cookie_crypt import save_domain_cookies
+
                 for domain, domain_cookies in by_domain.items():
                     save_domain_cookies(domain, domain_cookies)
 
-            return {"ok": True, "domains": len(by_domain), "total": sum(len(v) for v in by_domain.values())}
+            return {
+                "ok": True,
+                "domains": len(by_domain),
+                "total": sum(len(v) for v in by_domain.values()),
+            }
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
@@ -182,7 +217,8 @@ class BridgeHandler(ApiHandler):
             import asyncio
             import websockets
             from usr.plugins.phantom_bridge.cookie_crypt import (
-                delete_domain_cookies, delete_all_cookies,
+                delete_domain_cookies,
+                delete_all_cookies,
             )
 
             url = "http://127.0.0.1:9222/json"
@@ -200,6 +236,7 @@ class BridgeHandler(ApiHandler):
 
             async with websockets.connect(ws_url) as ws:
                 responses = {}
+
                 async def recv_loop():
                     async for raw in ws:
                         msg = json.loads(raw)
@@ -210,23 +247,33 @@ class BridgeHandler(ApiHandler):
 
                 if domain:
                     # Delete cookies for a specific domain
-                    await ws.send(json.dumps({
-                        "id": 1,
-                        "method": "Network.deleteCookies",
-                        "params": {"domain": domain, "name": "*"}
-                    }))
+                    await ws.send(
+                        json.dumps(
+                            {
+                                "id": 1,
+                                "method": "Network.deleteCookies",
+                                "params": {"domain": domain, "name": "*"},
+                            }
+                        )
+                    )
                     # Also try with dot prefix
-                    await ws.send(json.dumps({
-                        "id": 2,
-                        "method": "Network.deleteCookies",
-                        "params": {"domain": "." + domain.lstrip("."), "name": "*"}
-                    }))
+                    await ws.send(
+                        json.dumps(
+                            {
+                                "id": 2,
+                                "method": "Network.deleteCookies",
+                                "params": {
+                                    "domain": "." + domain.lstrip("."),
+                                    "name": "*",
+                                },
+                            }
+                        )
+                    )
                 else:
                     # Get all cookies then delete each
-                    await ws.send(json.dumps({
-                        "id": 1,
-                        "method": "Network.getAllCookies"
-                    }))
+                    await ws.send(
+                        json.dumps({"id": 1, "method": "Network.getAllCookies"})
+                    )
                     for _ in range(50):
                         if 1 in responses:
                             break
@@ -235,15 +282,19 @@ class BridgeHandler(ApiHandler):
                     cookies = responses.get(1, {}).get("result", {}).get("cookies", [])
                     msg_id = 10
                     for c in cookies:
-                        await ws.send(json.dumps({
-                            "id": msg_id,
-                            "method": "Network.deleteCookies",
-                            "params": {
-                                "name": c["name"],
-                                "domain": c.get("domain", ""),
-                                "path": c.get("path", "/"),
-                            }
-                        }))
+                        await ws.send(
+                            json.dumps(
+                                {
+                                    "id": msg_id,
+                                    "method": "Network.deleteCookies",
+                                    "params": {
+                                        "name": c["name"],
+                                        "domain": c.get("domain", ""),
+                                        "path": c.get("path", "/"),
+                                    },
+                                }
+                            )
+                        )
                         msg_id += 1
 
                 await asyncio.sleep(0.5)
@@ -262,4 +313,43 @@ class BridgeHandler(ApiHandler):
                 return {"ok": True, "deleted": "all"}
 
         except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    async def _record_start(self, input: dict) -> dict:
+        from usr.plugins.phantom_bridge.bridge import get_bridge
+
+        name = input.get("name", "")
+        if not name:
+            return {"ok": False, "error": "Missing 'name'"}
+        bridge = get_bridge()
+        if not bridge:
+            return {"ok": False, "error": "Bridge not running"}
+        recorder = getattr(bridge, "_playbook_recorder", None)
+        if not recorder:
+            return {"ok": False, "error": "Recorder unavailable"}
+        try:
+            await recorder.start_recording(name)
+            return {"ok": True, "name": name}
+        except (RuntimeError, ValueError) as e:
+            return {"ok": False, "error": str(e)}
+
+    async def _record_stop(self) -> dict:
+        from usr.plugins.phantom_bridge.bridge import get_bridge
+
+        bridge = get_bridge()
+        if not bridge:
+            return {"ok": False, "error": "Bridge not running"}
+        recorder = getattr(bridge, "_playbook_recorder", None)
+        if not recorder:
+            return {"ok": False, "error": "Recorder unavailable"}
+        try:
+            playbook = await recorder.stop_recording()
+            return {
+                "ok": True,
+                "name": playbook.name,
+                "domain": playbook.domain,
+                "steps": len(playbook.steps),
+                "duration_ms": playbook.duration_ms,
+            }
+        except RuntimeError as e:
             return {"ok": False, "error": str(e)}

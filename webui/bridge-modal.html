@@ -13,6 +13,12 @@
       </svg>
       <span id="pb-title">Phantom Bridge</span>
       <span id="pb-mode-tag"></span>
+      <button class="pb-titlebar-btn" id="pb-btn-record" title="Record workflow" style="display:none;">
+        <svg width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="#ef4444"/></svg>
+      </button>
+      <button class="pb-titlebar-btn" id="pb-btn-stop-record" title="Stop recording" style="display:none;">
+        <svg width="12" height="12" viewBox="0 0 12 12"><rect x="2" y="2" width="8" height="8" rx="1" fill="#ef4444"/></svg>
+      </button>
     </div>
     <div id="pb-titlebar-right">
       <button class="pb-titlebar-btn" id="pb-btn-popout" title="Open in new tab">
@@ -159,6 +165,8 @@
   var btnClose   = document.getElementById("pb-btn-close");
   var btnMin     = document.getElementById("pb-btn-minimize");
   var btnPopout  = document.getElementById("pb-btn-popout");
+  var btnRecord  = document.getElementById("pb-btn-record");
+  var btnStopRec = document.getElementById("pb-btn-stop-record");
   var loadingEl  = document.getElementById("pb-loading");
   var vncFrame   = document.getElementById("pb-vnc-frame");
   var scContainer= document.getElementById("pb-sc-container");
@@ -173,6 +181,7 @@
   var dragOffsetX = 0, dragOffsetY = 0;
   var scPollTimer = null;
   var kbActive = false;
+  var isRecording = false;
 
   var _callJsonApi = null;
   async function getApi() {
@@ -213,6 +222,45 @@
     globalThis._phantomBridgeModalVisible = false;
   }
 
+  // ── Recording ──
+  function showRecordButtons() { btnRecord.style.display = "flex"; }
+  function hideRecordButtons() { btnRecord.style.display = "none"; btnStopRec.style.display = "none"; }
+
+  btnRecord.addEventListener("click", async function(e) {
+    e.stopPropagation();
+    var name = prompt("Name this workflow (e.g. post_tweet, export_report):");
+    if (!name) return;
+    try {
+      await api("bridge", { action: "record_start", name: name });
+      isRecording = true;
+      btnRecord.style.display = "none";
+      btnStopRec.style.display = "flex";
+      modeTag.textContent = "REC";
+      modeTag.style.background = "rgba(239,68,68,0.2)";
+      modeTag.style.color = "#fca5a5";
+    } catch(err) {
+      alert("Failed to start recording: " + (err.message || err));
+    }
+  });
+
+  btnStopRec.addEventListener("click", async function(e) {
+    e.stopPropagation();
+    try {
+      var result = await api("bridge", { action: "record_stop" });
+      isRecording = false;
+      btnStopRec.style.display = "none";
+      btnRecord.style.display = "flex";
+      modeTag.textContent = "";
+      modeTag.style.background = "";
+      modeTag.style.color = "";
+      if (result && result.ok) {
+        alert("Playbook saved: " + (result.name || "unnamed") + " (" + (result.steps || 0) + " steps)");
+      }
+    } catch(err) {
+      alert("Failed to stop recording: " + (err.message || err));
+    }
+  });
+
   // ── Connect viewer ──
   async function connectViewer() {
     loadingEl.style.display = "flex";
@@ -232,18 +280,24 @@
       // noVNC reachable
       mode = "vnc";
       modeTag.textContent = "noVNC";
+      modeTag.style.background = "";
+      modeTag.style.color = "";
       vncFrame.src = vncUrl + "?autoconnect=true&resize=scale&reconnect=true&reconnect_delay=1000";
       vncFrame.style.display = "block";
       loadingEl.style.display = "none";
+      showRecordButtons();
       return;
     } catch(e) {}
 
     // Fallback: screencast
     mode = "screencast";
     modeTag.textContent = "Screencast";
+    modeTag.style.background = "";
+    modeTag.style.color = "";
     scContainer.style.display = "flex";
     loadingEl.style.display = "none";
     startScreencast();
+    showRecordButtons();
   }
 
   // ── Screencast ──

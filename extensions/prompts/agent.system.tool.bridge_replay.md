@@ -1,10 +1,9 @@
 ### bridge_replay:
 
-Replays a previously recorded browser workflow using Playwright.
+Replays a previously recorded browser workflow using Playwright with robust locator fallbacks.
 Uses the bridge's persistent browser profile so authenticated sessions are inherited.
 
-This is the core of "show A0 once, it does it forever" — the user demonstrates
-a workflow via the bridge, and you can replay it autonomously any time.
+The recorder captures multiple locator strategies per step (CSS selector, element text, aria-label, placeholder, role, label text). During replay, if an exact selector fails (common with dynamic class names, hashed IDs, or SPA re-renders), it falls back through alternative strategies automatically.
 
 arguments:
 - name (required): name of the playbook to replay

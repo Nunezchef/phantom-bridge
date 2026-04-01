@@ -17,3 +17,6 @@ Thumbs.db
 # Development context (not for public)
 .rune/
 CLAUDE.md
+
+# Git worktrees
+.worktrees/

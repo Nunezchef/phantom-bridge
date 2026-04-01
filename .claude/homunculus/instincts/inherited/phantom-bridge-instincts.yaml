@@ -1,0 +1,295 @@
+# Instincts generated from https://github.com/Nunezchef/phantom-bridge
+# Generated: 2026-04-01T01:58:39.716Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: phantom-bridge-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: fix, feat, docs, chore
+
+## Evidence
+
+- 67 commits analyzed
+- Detected conventional commit pattern
+- Examples: feat: agent-guided playbook replay with robust locator fallbacks, docs: add v1.1.1 changelog entry
+
+---
+id: phantom-bridge-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Commit Length
+
+## Action
+
+Write moderate-length commit messages (~57 characters)
+
+## Evidence
+
+- Average commit message length: 57 chars
+- Based on 67 commits
+
+---
+id: phantom-bridge-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Naming Files
+
+## Action
+
+Use snake_case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: snake_case
+
+---
+id: phantom-bridge-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: phantom-bridge-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: phantom-bridge-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Test Naming
+
+## Action
+
+Name test files using the pattern: *.test.ts
+
+## Evidence
+
+- File pattern: *.test.ts
+- Consistent across test files
+
+---
+id: phantom-bridge-workflow-feature-development
+trigger: "when implementing a new feature"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Workflow Feature Development
+
+## Action
+
+Follow the feature-development workflow:
+1. Add feature implementation
+2. Add tests for feature
+3. Update documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~14x per month
+- Files: **/*.test.*, **/api/**
+
+---
+id: phantom-bridge-workflow-feature-development-with-tests-and-docs
+trigger: "when doing feature development with tests and docs"
+confidence: 0.65
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Workflow Feature Development With Tests And Docs
+
+## Action
+
+Follow the feature-development-with-tests-and-docs workflow:
+1. Implement feature logic (often in multiple core files).
+2. Update or add related tests in tests/ directory.
+3. Update documentation or prompts if relevant (README.md, CHANGELOG.md, or prompt files).
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~3x per month
+- Files: api/bridge.py, bridge.py, observer/manager.py
+
+---
+id: phantom-bridge-workflow-bugfix-with-targeted-tests
+trigger: "when doing bugfix with targeted tests"
+confidence: 0.7
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Workflow Bugfix With Targeted Tests
+
+## Action
+
+Follow the bugfix-with-targeted-tests workflow:
+1. Identify and fix the bug in the relevant source file(s).
+2. Add or update a test in tests/ to cover the bug scenario.
+3. Sometimes update documentation or comments to clarify the fix.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~4x per month
+- Files: observer/manager.py, observer/playbook_recorder.py, observer/sitemap_learner.py
+
+---
+id: phantom-bridge-workflow-ui-icon-and-theme-refresh
+trigger: "when doing ui icon and theme refresh"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Workflow Ui Icon And Theme Refresh
+
+## Action
+
+Follow the ui-icon-and-theme-refresh workflow:
+1. Replace or update icon/image files (SVG, PNG) in webui/ and docs/.
+2. Update HTML files to reference new icons.
+3. Sometimes update README.md or other docs to reflect new branding.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: webui/icon.png, webui/thumbnail.png, webui/main.html
+
+---
+id: phantom-bridge-workflow-system-prompt-or-agent-prompt-extension
+trigger: "when doing system prompt or agent prompt extension"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Workflow System Prompt Or Agent Prompt Extension
+
+## Action
+
+Follow the system-prompt-or-agent-prompt-extension workflow:
+1. Edit or add files in extensions/system_prompt/ or extensions/prompts/.
+2. Update or add related tests in tests/ if prompt logic is programmatic.
+3. Sometimes update documentation to reflect new prompt behavior.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: extensions/system_prompt/_45_browser_bridge.py, extensions/prompts/agent.system.tool.bridge_replay.md, extensions/prompts/agent.system.tool.browser_bridge.md
+
+---
+id: phantom-bridge-workflow-documentation-and-changelog-update
+trigger: "when doing documentation and changelog update"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Workflow Documentation And Changelog Update
+
+## Action
+
+Follow the documentation-and-changelog-update workflow:
+1. Edit README.md, CHANGELOG.md, or add new docs/ assets.
+2. Sometimes update .gitignore or index.yaml for packaging/submission.
+3. May include banner or icon updates for branding.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: README.md, CHANGELOG.md, docs/banner.png
+
+---
+id: phantom-bridge-workflow-import-path-correction-for-plugin-context
+trigger: "when doing import path correction for plugin context"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Workflow Import Path Correction For Plugin Context
+
+## Action
+
+Follow the import-path-correction-for-plugin-context workflow:
+1. Identify modules with incorrect or brittle import paths.
+2. Change to relative or context-agnostic imports.
+3. Test in both standalone and plugin-invoked contexts.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: observer/playbook_recorder.py, observer/sitemap_learner.py, extensions/python/message_loop_start/_30_browser_bridge_profile.py
+

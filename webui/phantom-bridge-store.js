@@ -42,6 +42,7 @@ export const store = createStore("phantomBridge", {
             try {
                 this._ws.off("phantom_bridge_status");
                 this._ws.off("phantom_bridge_auth");
+                this._ws.off("phantom_bridge_playbook");
             } catch (_) {}
             this._ws = null;
         }
@@ -58,9 +59,22 @@ export const store = createStore("phantomBridge", {
             // A new login was detected: export cookies to disk first so the
             // on-disk encrypted files are current before fetchStatus() reads them.
             websocket.on("phantom_bridge_auth", () => this._exportAndRefresh());
+            // A new playbook was saved — show a toast, then refresh.
+            websocket.on("phantom_bridge_playbook", (payload) => this._onPlaybookSaved(payload));
         }).catch(() => {
             // WS not available — the 30s fallback poll handles updates.
         });
+    },
+
+    async _onPlaybookSaved(payload) {
+        try {
+            const { toastFrontendSuccess } = await import("/components/notifications/notification-store.js");
+            toastFrontendSuccess(
+                `Playbook '${payload.name}' saved — ${payload.steps} steps, ${(payload.duration_ms / 1000).toFixed(1)}s`,
+                "Phantom Bridge"
+            );
+        } catch (_) {}
+        await this.fetchStatus();
     },
 
     // Called on phantom_bridge_auth events: flush new cookies to disk before

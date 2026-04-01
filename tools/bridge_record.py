@@ -16,7 +16,6 @@ logger = logging.getLogger("phantom_bridge")
 
 
 class BridgeRecord(Tool):
-
     async def execute(self, **kwargs: Any) -> Response:
         action = self.args.get("action", "").lower()
         name = self.args.get("name", "")
@@ -89,6 +88,30 @@ class BridgeRecord(Tool):
         except RuntimeError as e:
             return Response(message=f"Cannot stop recording: {e}", break_loop=False)
 
+        # Send A0 notification so user sees a toast when playbook is saved
+        try:
+            from helpers.notification import (  # type: ignore
+                NotificationManager,
+                NotificationType,
+                NotificationPriority,
+            )
+
+            NotificationManager.send_notification(
+                type=NotificationType.SUCCESS,
+                priority=NotificationPriority.HIGH,
+                title="Phantom Bridge",
+                message=f"Playbook '{playbook.name}' saved",
+                detail=(
+                    f"Domain: {playbook.domain}\n"
+                    f"Steps: {len(playbook.steps)}\n"
+                    f"Duration: {playbook.duration_ms / 1000:.1f}s"
+                ),
+                display_time=8,
+                group="phantom_bridge_playbook",
+            )
+        except Exception:
+            pass
+
         return Response(
             message=(
                 f"Recording saved: '{playbook.name}'\n"
@@ -145,6 +168,7 @@ class BridgeRecord(Tool):
         """Get the PlaybookRecorder instance from the bridge plugin."""
         try:
             from usr.plugins.phantom_bridge.bridge import get_bridge
+
             bridge = get_bridge()
             if bridge and hasattr(bridge, "_playbook_recorder"):
                 return bridge._playbook_recorder
@@ -164,7 +188,9 @@ class BridgeRecord(Tool):
     def get_log_object(self):
         action = self.args.get("action", "unknown")
         name = self.args.get("name", "")
-        heading = f"icon://radio_button_checked {self.agent.agent_name}: Playbook Record"
+        heading = (
+            f"icon://radio_button_checked {self.agent.agent_name}: Playbook Record"
+        )
         if action == "start" and name:
             heading += f" — start '{name}'"
         elif action == "stop":

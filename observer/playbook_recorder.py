@@ -361,6 +361,25 @@ class PlaybookRecorder:
             duration_ms,
         )
 
+        # Push notification to UI via WebSocket
+        try:
+            from usr.plugins.phantom_bridge.ws_broadcast import (
+                broadcast as _ws_broadcast,
+            )
+
+            await _ws_broadcast(
+                "phantom_bridge_playbook",
+                {
+                    "name": playbook.name,
+                    "domain": playbook.domain,
+                    "steps": step_count,
+                    "duration_ms": duration_ms,
+                    "description": playbook.description or "",
+                },
+            )
+        except Exception as exc:
+            logger.debug("playbook_recorder: ws_broadcast failed: %s", exc)
+
         # Reset state
         self._current_steps = []
         self._current_name = None

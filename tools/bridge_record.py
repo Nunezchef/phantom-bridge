@@ -73,6 +73,15 @@ class BridgeRecord(Tool):
         except ValueError as e:
             return Response(message=f"Invalid name: {e}", break_loop=False)
 
+        # Set A0 progress bar to show recording state with shiny animation
+        try:
+            self.agent.context.log.set_progress(
+                f"Recording: {name} — navigate through the workflow",
+                progress_active=True,
+            )
+        except Exception:
+            pass
+
         return Response(
             message=(
                 f"Recording started: '{recorder._current_name}'\n\n"
@@ -87,6 +96,12 @@ class BridgeRecord(Tool):
             playbook = await recorder.stop_recording(description=description)
         except RuntimeError as e:
             return Response(message=f"Cannot stop recording: {e}", break_loop=False)
+
+        # Clear A0 progress bar — recording finished
+        try:
+            self.agent.context.log.set_initial_progress()
+        except Exception:
+            pass
 
         # Send A0 notification so user sees a toast when playbook is saved
         try:

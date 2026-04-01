@@ -47,6 +47,10 @@ class BridgeHandler(ApiHandler):
         elif action == "delete_cookies":
             domain = input.get("domain", "")
             return await self._delete_cookies(domain)
+        elif action == "session_health":
+            return await self._session_health()
+        elif action == "metrics":
+            return self._metrics()
         else:
             return {"ok": False, "error": f"Unknown action: {action}"}
 
@@ -360,3 +364,115 @@ class BridgeHandler(ApiHandler):
             }
         except RuntimeError as e:
             return {"ok": False, "error": str(e)}
+
+    async def _session_health(self) -> dict:
+        from datetime import datetime, timezone
+
+        from usr.plugins.phantom_bridge.bridge import get_bridge
+
+        bridge = get_bridge()
+        if not bridge or not bridge.is_running():
+            return {"ok": False, "error": "Bridge not running"}
+
+        om = getattr(bridge, "_observer_manager", None)
+        if om is None:
+            return {"ok": False, "error": "Observer not available"}
+
+        auth = getattr(om, "auth", None)
+        if auth is None:
+            return {"ok": False, "error": "Auth registry not available"}
+
+        cdp = getattr(om, "_cdp", None)
+        cdp_healthy = cdp.healthy if cdp else False
+
+        registry = auth.get_registry()
+        expiry = auth.check_expired_sessions()
+        now = datetime.now(timezone.utc)
+
+        domains = []
+        for domain, entry in sorted(registry.items()):
+            expires_at = entry.get("expires_at")
+            is_expired = domain in expiry["expired"]
+            is_expiring = domain in expiry["expiring_soon"]
+
+            domains.append(
+                {
+                    "domain": domain,
+                    "authenticated": entry.get("authenticated", False),
+                    "expires_at": expires_at,
+                    "is_expired": is_expired,
+                    "is_expiring_soon": is_expiring,
+                    "cookie_count": entry.get("session_cookie_count", 0),
+                    "last_seen": entry.get("last_seen"),
+                    "cdp_healthy": cdp_healthy,
+                }
+            )
+
+        return {
+            "ok": True,
+            "domains": domains,
+            "expired": expiry["expired"],
+            "expiring_soon": expiry["expiring_soon"],
+            "cdp_healthy": cdp_healthy,
+        }
+
+    async def _session_health(self) -> dict:
+        from datetime import datetime, timezone
+
+        from usr.plugins.phantom_bridge.bridge import get_bridge
+
+        bridge = get_bridge()
+        if not bridge or not bridge.is_running():
+            return {"ok": False, "error": "Bridge not running"}
+
+        om = getattr(bridge, "_observer_manager", None)
+        if om is None:
+            return {"ok": False, "error": "Observer not available"}
+
+        auth = getattr(om, "auth", None)
+        if auth is None:
+            return {"ok": False, "error": "Auth registry not available"}
+
+        cdp = getattr(om, "_cdp", None)
+        cdp_healthy = cdp.healthy if cdp else False
+
+        registry = auth.get_registry()
+        expiry = auth.check_expired_sessions()
+        now = datetime.now(timezone.utc)
+
+        domains = []
+        for domain, entry in sorted(registry.items()):
+            expires_at = entry.get("expires_at")
+            is_expired = domain in expiry["expired"]
+            is_expiring = domain in expiry["expiring_soon"]
+
+            domains.append(
+                {
+                    "domain": domain,
+                    "authenticated": entry.get("authenticated", False),
+                    "expires_at": expires_at,
+                    "is_expired": is_expired,
+                    "is_expiring_soon": is_expiring,
+                    "cookie_count": entry.get("session_cookie_count", 0),
+                    "last_seen": entry.get("last_seen"),
+                    "cdp_healthy": cdp_healthy,
+                }
+            )
+
+        return {
+            "ok": True,
+            "domains": domains,
+            "expired": expiry["expired"],
+            "expiring_soon": expiry["expiring_soon"],
+            "cdp_healthy": cdp_healthy,
+        }
+
+    def _metrics(self) -> dict:
+        from usr.plugins.phantom_bridge.observer.metrics import get_metrics
+
+        return {"ok": True, "metrics": get_metrics().snapshot()}
+
+    def _metrics(self) -> dict:
+        from usr.plugins.phantom_bridge.observer.metrics import get_metrics
+
+        return {"ok": True, "metrics": get_metrics().snapshot()}

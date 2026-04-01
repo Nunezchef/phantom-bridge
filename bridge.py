@@ -62,6 +62,7 @@ class BrowserBridge:
         self._process: subprocess.Popen | None = None  # type: ignore[type-arg]
         self._started_at: float | None = None
         self._observer_manager = None
+        self._observer_error: str | None = None
         self._xvfb_process: subprocess.Popen | None = None  # type: ignore[type-arg]
         self._vnc_process: subprocess.Popen | None = None  # type: ignore[type-arg]
         self._websockify_process: subprocess.Popen | None = None  # type: ignore[type-arg]
@@ -115,8 +116,9 @@ class BrowserBridge:
                 lock_path.unlink(missing_ok=True)
                 logger.info("browser_bridge: removed stale %s", lock_file)
 
-        # Ensure a display is available (start Xvfb if needed)
-        self._ensure_display()
+        # Ensure a display is available (start Xvfb if needed) — skip in headless
+        if not self.headless:
+            self._ensure_display()
 
         # Resolve Chromium binary
         chrome_bin = self._resolve_chromium()
@@ -195,11 +197,13 @@ class BrowserBridge:
             await self._observer_manager.start()
             logger.info("browser_bridge: observer layers started")
         except Exception as e:
+            self._observer_error = str(e)
             logger.warning("browser_bridge: observer layers failed to start: %s", e)
             self._observer_manager = None
 
-        # Start noVNC (x11vnc + websockify) for remote browser control
-        self._start_novnc()
+        # Start noVNC (x11vnc + websockify) for remote browser control — skip in headless
+        if not self.headless:
+            self._start_novnc()
 
         # Notify connected UI clients that the bridge is now running.
         try:
@@ -299,14 +303,50 @@ class BrowserBridge:
         if running and self._started_at:
             info["uptime_seconds"] = int(time.time() - self._started_at)
             info["connect_url"] = f"http://localhost:{self.remote_debug_port}"
-            info["novnc_url"] = (
-                f"http://localhost:{self.novnc_port}/vnc.html?autoconnect=true&resize=scale"
-            )
-            info["novnc_port"] = self.novnc_port
-            info["novnc_running"] = (
-                self._vnc_process is not None and self._vnc_process.poll() is None
-            )
+            info["headless"] = self.headless
+
+            if not self.headless:
+                info["novnc_url"] = (
+                    f"http://localhost:{self.novnc_port}/vnc.html?autoconnect=true&resize=scale"
+                )
+                info["novnc_port"] = self.novnc_port
+                info["novnc_running"] = (
+                    self._vnc_process is not None and self._vnc_process.poll() is None
+                )
+
             info["pid"] = self._process.pid if self._process else None
+
+            # CDP health from observer manager
+            om = self._observer_manager
+            if om is not None:
+                cdp = getattr(om, "_cdp", None)
+                if cdp is not None:
+                    info["cdp_connected"] = cdp.connected
+                    info["cdp_healthy"] = cdp.healthy
+                    info["observer_running"] = True
+                else:
+                    info["cdp_connected"] = False
+                    info["cdp_healthy"] = False
+                    info["observer_running"] = False
+            else:
+                info["cdp_connected"] = False
+                info["cdp_healthy"] = False
+                info["observer_running"] = False
+
+            if self._observer_error:
+                info["observer_error"] = self._observer_error
+
+            # Session expiry warnings from auth registry
+            try:
+                auth = getattr(om, "auth", None)
+                if auth is not None:
+                    expiry = auth.check_expired_sessions()
+                    if expiry["expired"]:
+                        info["expired_domains"] = expiry["expired"]
+                    if expiry["expiring_soon"]:
+                        info["expiring_soon_domains"] = expiry["expiring_soon"]
+            except Exception:
+                pass
 
         # List active pages via DevTools JSON endpoint
         if running:

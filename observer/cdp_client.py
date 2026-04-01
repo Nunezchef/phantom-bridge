@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 import urllib.request
 from collections import defaultdict
 from typing import Any, Callable
@@ -23,6 +24,7 @@ logger = logging.getLogger("phantom_bridge")
 _MAX_CONNECT_ATTEMPTS = 10
 _INITIAL_BACKOFF = 0.5  # seconds
 _MAX_BACKOFF = 5.0
+_HEARTBEAT_INTERVAL = 15  # seconds between heartbeat checks
 
 
 class CDPClient:
@@ -38,6 +40,14 @@ class CDPClient:
         self._ws_url: str | None = None
         self._listen_task: asyncio.Task | None = None
         self._shutdown = False
+        self._healthy = False
+        self._last_heartbeat: float = 0.0
+        self._heartbeat_task: asyncio.Task | None = None
+        self._on_health_change: Callable[[bool], Any] | None = None
+        self._healthy = False
+        self._last_heartbeat: float = 0.0
+        self._heartbeat_task: asyncio.Task | None = None
+        self._on_health_change: Callable[[bool], Any] | None = None
 
     # ------------------------------------------------------------------
     # Connection
@@ -53,6 +63,12 @@ class CDPClient:
         self._shutdown = False
         self._ws_url = await self._discover_ws_url()
         await self._connect_ws()
+        self._healthy = True
+        self._last_heartbeat = time.monotonic()
+        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+        self._healthy = True
+        self._last_heartbeat = time.monotonic()
+        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
     async def _discover_ws_url(self) -> str:
         """Discover the WebSocket URL with retry + backoff."""
@@ -113,6 +129,15 @@ class CDPClient:
         """Clean disconnect."""
         self._shutdown = True
         self._connected = False
+        self._healthy = False
+
+        if self._heartbeat_task and not self._heartbeat_task.done():
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            self._heartbeat_task = None
 
         if self._listen_task and not self._listen_task.done():
             self._listen_task.cancel()
@@ -136,6 +161,33 @@ class CDPClient:
         self._pending.clear()
 
         logger.info("cdp_client: disconnected")
+
+    # ------------------------------------------------------------------
+    # Heartbeat
+    # ------------------------------------------------------------------
+
+    def set_health_callback(self, callback: Callable[[bool], Any]) -> None:
+        """Register a callback invoked when CDP health status changes."""
+        self._on_health_change = callback
+
+    async def _heartbeat_loop(self) -> None:
+        """Periodically verify CDP is responsive via Browser.getVersion."""
+        while not self._shutdown:
+            await asyncio.sleep(_HEARTBEAT_INTERVAL)
+            if self._shutdown or not self._connected:
+                continue
+            try:
+                await self.send("Browser.getVersion")
+                prev = self._healthy
+                self._healthy = True
+                self._last_heartbeat = time.monotonic()
+                if not prev and self._on_health_change:
+                    self._on_health_change(True)
+            except Exception as exc:
+                if self._healthy and self._on_health_change:
+                    self._on_health_change(False)
+                self._healthy = False
+                logger.warning("cdp_client: heartbeat failed: %s", exc)
 
     # ------------------------------------------------------------------
     # Commands
@@ -280,7 +332,11 @@ class CDPClient:
                 # Re-discover in case the target changed
                 self._ws_url = await self._discover_ws_url()
                 await self._connect_ws()
-                # Re-enable domains that were active
+                self._healthy = True
+                self._last_heartbeat = time.monotonic()
+                self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+                if self._on_health_change:
+                    self._on_health_change(True)
                 logger.info("cdp_client: reconnected successfully")
                 return
             except Exception as exc:
@@ -292,6 +348,12 @@ class CDPClient:
             "cdp_client: failed to reconnect after %d attempts", _MAX_CONNECT_ATTEMPTS
         )
         self._connected = False
+        self._healthy = False
+        if self._on_health_change:
+            self._on_health_change(False)
+        self._healthy = False
+        if self._on_health_change:
+            self._on_health_change(False)
 
     # ------------------------------------------------------------------
     # Properties
@@ -301,3 +363,23 @@ class CDPClient:
     def connected(self) -> bool:
         """Whether the WebSocket is currently connected."""
         return self._connected
+
+    @property
+    def healthy(self) -> bool:
+        """Whether CDP is responsive (last heartbeat succeeded)."""
+        return self._healthy and self._connected
+
+    @property
+    def last_heartbeat(self) -> float:
+        """Monotonic timestamp of last successful heartbeat."""
+        return self._last_heartbeat
+
+    @property
+    def healthy(self) -> bool:
+        """Whether CDP is responsive (last heartbeat succeeded)."""
+        return self._healthy and self._connected
+
+    @property
+    def last_heartbeat(self) -> float:
+        """Monotonic timestamp of last successful heartbeat."""
+        return self._last_heartbeat

@@ -24,6 +24,7 @@ from observer.manager import ObserverManager
 # Fake CDP that cooperates with the manager lifecycle
 # ---------------------------------------------------------------------------
 
+
 class _FakeCDP:
     def __init__(self):
         self.connected = False
@@ -60,6 +61,7 @@ class _FakeCDP:
 # Patch ObserverManager to use our fake CDP
 # ---------------------------------------------------------------------------
 
+
 def _make_manager(tmp_path: Path) -> ObserverManager:
     manager = ObserverManager(port=9222, data_dir=tmp_path)
     manager._cdp = _FakeCDP()
@@ -70,8 +72,8 @@ def _make_manager(tmp_path: Path) -> ObserverManager:
 # Tests
 # ---------------------------------------------------------------------------
 
-class TestObserverManagerTaskCleanup:
 
+class TestObserverManagerTaskCleanup:
     @pytest.mark.asyncio
     async def test_start_creates_listener_task(self, tmp_path):
         manager = _make_manager(tmp_path)
@@ -159,21 +161,23 @@ class TestBridgeAlwaysCreatesNewManager:
     """Verify bridge.py creates a new ObserverManager on every start(), never reusing one."""
 
     def test_create_bridge_from_config_returns_fresh_instance(self, tmp_path):
-        """Each create_bridge_from_config call produces an independent BrowserBridge
-        with _observer_manager=None, confirming no stale state is carried over."""
-        import bridge as bridge_mod
+        import os
+        import data_paths as dp_mod
 
-        # Patch yaml and profile resolution to avoid filesystem side effects
-        with patch("bridge.Path") as MockPath:
-            MockPath.return_value.__truediv__ = lambda s, o: tmp_path / o
-            MockPath.return_value.resolve.return_value = tmp_path
+        old_env = os.environ.pop("PHANTOM_BRIDGE_DATA_DIR", None)
+        try:
+            with patch.object(dp_mod, "ensure_dirs"):
+                with patch.object(
+                    dp_mod, "get_profile_dir", return_value=tmp_path / "profile"
+                ):
+                    from bridge import create_bridge_from_config
 
-            from bridge import create_bridge_from_config
-            b1 = create_bridge_from_config({})
-            b2 = create_bridge_from_config({})
+                    b1 = create_bridge_from_config({})
+                    b2 = create_bridge_from_config({})
+        finally:
+            if old_env is not None:
+                os.environ["PHANTOM_BRIDGE_DATA_DIR"] = old_env
 
-        # Each call produces a distinct BrowserBridge instance
         assert b1 is not b2
-        # Neither has started an observer manager yet
         assert b1._observer_manager is None
         assert b2._observer_manager is None

@@ -385,8 +385,12 @@ class BridgeReplay(Tool):
             from usr.plugins.phantom_bridge.bridge import get_bridge
 
             bridge = get_bridge()
-            if bridge and hasattr(bridge, "_playbook_recorder"):
-                return bridge._playbook_recorder
+            if bridge:
+                om = getattr(bridge, "_observer_manager", None)
+                if om:
+                    recorder = getattr(om, "_playbook", None)
+                    if recorder:
+                        return recorder
         except ImportError:
             pass
 

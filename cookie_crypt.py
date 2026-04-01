@@ -16,11 +16,12 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet
 
+from .data_paths import get_cookies_dir, get_key_file
+
 logger = logging.getLogger("phantom_bridge")
 
-_plugin_root = Path(__file__).resolve().parent
-_KEY_FILE = _plugin_root / "data" / ".cookie_key"
-_COOKIES_DIR = _plugin_root / "data" / "cookies"
+_KEY_FILE = get_key_file()
+_COOKIES_DIR = get_cookies_dir()
 
 # Module-level cache so we don't re-read the key file on every call
 _fernet: Fernet | None = None
@@ -59,6 +60,7 @@ def decrypt_value(token: str) -> str:
 # Per-domain read / write
 # ------------------------------------------------------------------
 
+
 def save_domain_cookies(domain: str, cookies: list[dict]) -> Path:
     """Encrypt cookie values and write to data/cookies/<domain>.json.
 
@@ -75,9 +77,7 @@ def save_domain_cookies(domain: str, cookies: list[dict]) -> Path:
         encrypted.append(entry)
 
     file_path = _COOKIES_DIR / f"{domain}.json"
-    file_path.write_text(
-        json.dumps(encrypted, indent=2, default=str), encoding="utf-8"
-    )
+    file_path.write_text(json.dumps(encrypted, indent=2, default=str), encoding="utf-8")
     return file_path
 
 

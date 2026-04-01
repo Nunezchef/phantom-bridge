@@ -29,10 +29,21 @@ _plugin_dir = Path(__file__).resolve().parent.parent.parent
 
 # Model name substrings that indicate a small / local model.
 # Checked case-insensitively against agent.config.chat_model.name.
-_SMALL_MODEL_HINTS = frozenset({
-    "small", "mini", "tiny", "nano", "phi", "gemma", "mistral-7b",
-    "llama-7b", "llama3.2", "qwen-7b", "deepseek-7b",
-})
+_SMALL_MODEL_HINTS = frozenset(
+    {
+        "small",
+        "mini",
+        "tiny",
+        "nano",
+        "phi",
+        "gemma",
+        "mistral-7b",
+        "llama-7b",
+        "llama3.2",
+        "qwen-7b",
+        "deepseek-7b",
+    }
+)
 
 # Context window threshold below which we treat the model as "small".
 _SMALL_CTX_THRESHOLD = 8192
@@ -105,7 +116,8 @@ def _full_prompt(data_dir: Path) -> str:
     """Full-detail injection for large models."""
     sections: list[str] = []
 
-    sections.append("""\
+    sections.append(
+        """\
 ## Phantom Bridge — Browser Authentication & Automation
 
 You have access to a browser bridge plugin that lets the user authenticate
@@ -163,7 +175,9 @@ The key is stored at `data/.cookie_key` (auto-generated on first export).
 Cookie names and metadata are in plaintext — only values are encrypted.
 To read decrypted cookies, always use the **bridge_decrypt_cookies** tool.
 
-""" + _TOOL_EXAMPLES)
+"""
+        + _TOOL_EXAMPLES
+    )
 
     # ----- Live auth state -----
     auth_file = data_dir / "auth_registry.json"
@@ -203,9 +217,7 @@ To read decrypted cookies, always use the **bridge_decrypt_cookies** tool.
                     steps = len(pb.get("steps", []))
                     desc = pb.get("description", "")
                     desc_str = f" — {desc}" if desc else ""
-                    sections.append(
-                        f"- **{name}** ({domain}, {steps} steps){desc_str}"
-                    )
+                    sections.append(f"- **{name}** ({domain}, {steps} steps){desc_str}")
                 except Exception:
                     pass
             sections.append("")
@@ -226,9 +238,7 @@ To read decrypted cookies, always use the **bridge_decrypt_cookies** tool.
                     sm = json.loads(sf.read_text())
                     domain = sm.get("domain", sf.stem)
                     features = sm.get("features", {})
-                    sections.append(
-                        f"- **{domain}** — {len(features)} features mapped"
-                    )
+                    sections.append(f"- **{domain}** — {len(features)} features mapped")
                 except Exception:
                     pass
             sections.append("")
@@ -243,9 +253,12 @@ class BrowserBridgeContext(Extension):
         loop_data: LoopData = LoopData(),
         **kwargs: Any,
     ) -> None:
-        data_dir = _plugin_dir / "data"
+        try:
+            from usr.plugins.phantom_bridge.data_paths import DATA_DIR
+        except ImportError:
+            from data_paths import DATA_DIR
 
         if _is_small_model(self.agent):
-            system_prompt.append(_compact_prompt(data_dir))
+            system_prompt.append(_compact_prompt(DATA_DIR))
         else:
-            system_prompt.append(_full_prompt(data_dir))
+            system_prompt.append(_full_prompt(DATA_DIR))

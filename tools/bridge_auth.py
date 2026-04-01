@@ -16,7 +16,6 @@ logger = logging.getLogger("phantom_bridge")
 
 
 class BrowserBridgeAuth(Tool):
-
     async def execute(self, **kwargs: Any) -> Response:
         from usr.plugins.phantom_bridge.bridge import get_bridge
 
@@ -74,7 +73,9 @@ class BrowserBridgeAuth(Tool):
 
             lines.append(f"  {domain}:")
             lines.append(f"    Status: {auth_status}")
-            lines.append(f"    Session cookies: {', '.join(cookies) if cookies else 'none'}")
+            lines.append(
+                f"    Session cookies: {', '.join(cookies) if cookies else 'none'}"
+            )
             lines.append(f"    Expires: {expires or 'session-based'}")
             lines.append(f"    Login URL: {login_url or 'N/A'}")
             lines.append(f"    Detected: {detected}")
@@ -89,21 +90,10 @@ class BrowserBridgeAuth(Tool):
     def _read_registry_from_file(self) -> Response:
         """Fall back to reading the persisted auth_registry.json."""
         import json
-        from pathlib import Path
 
-        registry_path = (
-            Path(__file__).resolve().parent.parent / "data" / "auth_registry.json"
-        )
+        from usr.plugins.phantom_bridge.data_paths import get_auth_registry_file
 
-        if not registry_path.exists():
-            return Response(
-                message=(
-                    "Auth registry file not found.\n"
-                    "No authentication data available.\n"
-                    "The observer layer may not have been started yet."
-                ),
-                break_loop=False,
-            )
+        registry_path = get_auth_registry_file()
 
         try:
             data = json.loads(registry_path.read_text(encoding="utf-8"))

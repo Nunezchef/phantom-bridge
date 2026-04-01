@@ -25,7 +25,9 @@ class ObserverManager:
         data_dir: Path | None = None,
     ):
         if data_dir is None:
-            data_dir = Path(__file__).resolve().parent.parent / "data"
+            from ..data_paths import DATA_DIR
+
+            data_dir = DATA_DIR
 
         self._data_dir = data_dir
         self._cdp = CDPClient(port=port)
@@ -44,7 +46,9 @@ class ObserverManager:
     async def start(self) -> None:
         """Connect CDP, enable domains, start all observers."""
         if self._started:
-            logger.warning("observer_manager: start() called on already-started manager; ignoring")
+            logger.warning(
+                "observer_manager: start() called on already-started manager; ignoring"
+            )
             return
         await self._cdp.connect()
         self._started = True
@@ -116,6 +120,7 @@ class ObserverManager:
         """Broadcast a phantom_bridge_auth event when a domain authenticates."""
         try:
             from usr.plugins.phantom_bridge.ws_broadcast import broadcast
+
             await broadcast(
                 "phantom_bridge_auth",
                 {

@@ -87,14 +87,19 @@ class BrowserBridge:
             self._start_novnc()
             try:
                 from usr.plugins.phantom_bridge.screencast import ScreencastManager
+
                 self._screencast = ScreencastManager(port=self.remote_debug_port)
                 await self._screencast.start()
             except Exception:
                 pass
             try:
+                from usr.plugins.phantom_bridge.data_paths import DATA_DIR, ensure_dirs
                 from usr.plugins.phantom_bridge.observer.manager import ObserverManager
-                data_dir = self.profile_dir.parent
-                self._observer_manager = ObserverManager(port=self.remote_debug_port, data_dir=data_dir)
+
+                ensure_dirs()
+                self._observer_manager = ObserverManager(
+                    port=self.remote_debug_port, data_dir=DATA_DIR
+                )
                 await self._observer_manager.start()
             except Exception:
                 pass
@@ -179,12 +184,13 @@ class BrowserBridge:
 
         # Start observer layers (auth registry, sitemap learner, playbook recorder)
         try:
+            from usr.plugins.phantom_bridge.data_paths import DATA_DIR, ensure_dirs
             from usr.plugins.phantom_bridge.observer.manager import ObserverManager
 
-            data_dir = self.profile_dir.parent  # data/ directory (sibling to profile/)
+            ensure_dirs()
             self._observer_manager = ObserverManager(
                 port=self.remote_debug_port,
-                data_dir=data_dir,
+                data_dir=DATA_DIR,
             )
             await self._observer_manager.start()
             logger.info("browser_bridge: observer layers started")
@@ -197,7 +203,10 @@ class BrowserBridge:
 
         # Notify connected UI clients that the bridge is now running.
         try:
-            from usr.plugins.phantom_bridge.ws_broadcast import broadcast as _ws_broadcast
+            from usr.plugins.phantom_bridge.ws_broadcast import (
+                broadcast as _ws_broadcast,
+            )
+
             await _ws_broadcast("phantom_bridge_status", {"running": True})
         except Exception:
             pass
@@ -205,6 +214,7 @@ class BrowserBridge:
         # Start screencast manager (zero-config fallback when noVNC port isn't exposed)
         try:
             from usr.plugins.phantom_bridge.screencast import ScreencastManager
+
             self._screencast = ScreencastManager(port=self.remote_debug_port)
             await self._screencast.start()
             logger.info("browser_bridge: screencast manager started")
@@ -257,7 +267,10 @@ class BrowserBridge:
 
         # Notify connected UI clients that the bridge has stopped.
         try:
-            from usr.plugins.phantom_bridge.ws_broadcast import broadcast as _ws_broadcast
+            from usr.plugins.phantom_bridge.ws_broadcast import (
+                broadcast as _ws_broadcast,
+            )
+
             await _ws_broadcast("phantom_bridge_status", {"running": False})
         except Exception:
             pass
@@ -286,9 +299,13 @@ class BrowserBridge:
         if running and self._started_at:
             info["uptime_seconds"] = int(time.time() - self._started_at)
             info["connect_url"] = f"http://localhost:{self.remote_debug_port}"
-            info["novnc_url"] = f"http://localhost:{self.novnc_port}/vnc.html?autoconnect=true&resize=scale"
+            info["novnc_url"] = (
+                f"http://localhost:{self.novnc_port}/vnc.html?autoconnect=true&resize=scale"
+            )
             info["novnc_port"] = self.novnc_port
-            info["novnc_running"] = self._vnc_process is not None and self._vnc_process.poll() is None
+            info["novnc_running"] = (
+                self._vnc_process is not None and self._vnc_process.poll() is None
+            )
             info["pid"] = self._process.pid if self._process else None
 
         # List active pages via DevTools JSON endpoint
@@ -329,7 +346,9 @@ class BrowserBridge:
     def clear_profile(self) -> None:
         """Delete the browser profile (all cookies, sessions, localStorage)."""
         if self.is_running():
-            raise RuntimeError("Cannot clear profile while bridge is running. Stop the bridge first.")
+            raise RuntimeError(
+                "Cannot clear profile while bridge is running. Stop the bridge first."
+            )
         if self.profile_dir.exists():
             shutil.rmtree(self.profile_dir)
             self.profile_dir.mkdir(parents=True, exist_ok=True)
@@ -346,27 +365,60 @@ class BrowserBridge:
         try:
             # Wait for the window to appear, then resize it
             subprocess.run(
-                [xdotool, "search", "--sync", "--onlyvisible", "--name", "", "windowsize", "--sync", "%@",
-                 str(self.window_width), str(self.window_height)],
-                env=run_env, timeout=5, capture_output=True,
+                [
+                    xdotool,
+                    "search",
+                    "--sync",
+                    "--onlyvisible",
+                    "--name",
+                    "",
+                    "windowsize",
+                    "--sync",
+                    "%@",
+                    str(self.window_width),
+                    str(self.window_height),
+                ],
+                env=run_env,
+                timeout=5,
+                capture_output=True,
             )
             subprocess.run(
-                [xdotool, "search", "--onlyvisible", "--name", "", "windowmove", "%@", "0", "0"],
-                env=run_env, timeout=3, capture_output=True,
+                [
+                    xdotool,
+                    "search",
+                    "--onlyvisible",
+                    "--name",
+                    "",
+                    "windowmove",
+                    "%@",
+                    "0",
+                    "0",
+                ],
+                env=run_env,
+                timeout=3,
+                capture_output=True,
             )
-            logger.info("browser_bridge: window resized to %dx%d", self.window_width, self.window_height)
+            logger.info(
+                "browser_bridge: window resized to %dx%d",
+                self.window_width,
+                self.window_height,
+            )
         except Exception as e:
             logger.debug("browser_bridge: xdotool resize failed (non-critical): %s", e)
 
     def _detect_existing_chrome(self) -> bool:
         """Check if Chrome is already running with CDP on our port."""
         import urllib.request
+
         for host in ["127.0.0.1", "[::1]"]:
             try:
                 url = f"http://{host}:{self.remote_debug_port}/json/version"
                 with urllib.request.urlopen(url, timeout=2) as resp:
                     if resp.status == 200:
-                        logger.info("browser_bridge: detected existing Chrome on port %d", self.remote_debug_port)
+                        logger.info(
+                            "browser_bridge: detected existing Chrome on port %d",
+                            self.remote_debug_port,
+                        )
                         return True
             except Exception:
                 pass
@@ -407,9 +459,14 @@ class BrowserBridge:
         try:
             self._xvfb_process = subprocess.Popen(
                 [
-                    xvfb_bin, display,
-                    "-screen", "0", f"{self.window_width}x{self.window_height}x24",
-                    "-ac", "-nolisten", "tcp",
+                    xvfb_bin,
+                    display,
+                    "-screen",
+                    "0",
+                    f"{self.window_width}x{self.window_height}x24",
+                    "-ac",
+                    "-nolisten",
+                    "tcp",
                 ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -429,6 +486,7 @@ class BrowserBridge:
     def _is_port_in_use(port: int) -> bool:
         """Check if a TCP port is already in use."""
         import socket
+
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             return s.connect_ex(("127.0.0.1", port)) == 0
 
@@ -442,7 +500,10 @@ class BrowserBridge:
             logger.info("browser_bridge: x11vnc already running on port %d", vnc_port)
             # Check if websockify is also running
             if self._is_port_in_use(self.novnc_port):
-                logger.info("browser_bridge: websockify already running on port %d", self.novnc_port)
+                logger.info(
+                    "browser_bridge: websockify already running on port %d",
+                    self.novnc_port,
+                )
                 return
             # Only need websockify
             self._start_websockify(vnc_port)
@@ -461,17 +522,21 @@ class BrowserBridge:
             self._vnc_process = subprocess.Popen(
                 [
                     x11vnc_bin,
-                    "-display", display,
+                    "-display",
+                    display,
                     "-nopw",
                     "-forever",
                     "-shared",
-                    "-rfbport", str(vnc_port),
+                    "-rfbport",
+                    str(vnc_port),
                     "-quiet",
                 ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            logger.info("browser_bridge: x11vnc started on :%d (display %s)", vnc_port, display)
+            logger.info(
+                "browser_bridge: x11vnc started on :%d (display %s)", vnc_port, display
+            )
         except Exception as e:
             logger.warning("browser_bridge: failed to start x11vnc: %s", e)
             return
@@ -481,7 +546,9 @@ class BrowserBridge:
     def _start_websockify(self, vnc_port: int) -> None:
         """Start websockify to bridge VNC over WebSocket."""
         if self._is_port_in_use(self.novnc_port):
-            logger.info("browser_bridge: websockify already running on port %d", self.novnc_port)
+            logger.info(
+                "browser_bridge: websockify already running on port %d", self.novnc_port
+            )
             return
 
         websockify_bin = shutil.which("websockify")
@@ -493,17 +560,30 @@ class BrowserBridge:
 
         try:
             self._websockify_process = subprocess.Popen(
-                [websockify_bin, "--web", novnc_web, f"0.0.0.0:{self.novnc_port}", f"localhost:{vnc_port}"],
+                [
+                    websockify_bin,
+                    "--web",
+                    novnc_web,
+                    f"0.0.0.0:{self.novnc_port}",
+                    f"localhost:{vnc_port}",
+                ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            logger.info("browser_bridge: noVNC ready at http://localhost:%d/vnc.html", self.novnc_port)
+            logger.info(
+                "browser_bridge: noVNC ready at http://localhost:%d/vnc.html",
+                self.novnc_port,
+            )
         except Exception as e:
             logger.warning("browser_bridge: failed to start websockify: %s", e)
 
     def _stop_novnc(self) -> None:
         """Stop noVNC and Xvfb processes."""
-        for name, proc_attr in [("websockify", "_websockify_process"), ("x11vnc", "_vnc_process"), ("Xvfb", "_xvfb_process")]:
+        for name, proc_attr in [
+            ("websockify", "_websockify_process"),
+            ("x11vnc", "_vnc_process"),
+            ("Xvfb", "_xvfb_process"),
+        ]:
             proc = getattr(self, proc_attr, None)
             if proc is None:
                 continue
@@ -522,9 +602,9 @@ class BrowserBridge:
     def _find_novnc_web_dir() -> str:
         """Find the noVNC static files directory."""
         candidates = [
-            "/usr/share/novnc",          # Debian/Ubuntu apt package
-            "/usr/share/novnc/utils/../", # Alternate layout
-            "/opt/novnc",                 # Manual install
+            "/usr/share/novnc",  # Debian/Ubuntu apt package
+            "/usr/share/novnc/utils/../",  # Alternate layout
+            "/opt/novnc",  # Manual install
         ]
         for path in candidates:
             check = Path(path)
@@ -544,7 +624,12 @@ class BrowserBridge:
 
         # Prefer system Chromium — it works reliably from Python subprocess
         # (Playwright's ARM64 build crashes with SIGTRAP from Python Popen)
-        for name in ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable"]:
+        for name in [
+            "chromium",
+            "chromium-browser",
+            "google-chrome",
+            "google-chrome-stable",
+        ]:
             path = shutil.which(name)
             if path:
                 logger.info("browser_bridge: using system Chromium at %s", path)
@@ -552,7 +637,10 @@ class BrowserBridge:
 
         # Try A0's Playwright-installed Chromium as fallback
         try:
-            from helpers.playwright import get_playwright_binary, ensure_playwright_binary
+            from helpers.playwright import (
+                get_playwright_binary,
+                ensure_playwright_binary,
+            )
 
             binary = get_playwright_binary()
             if binary:
@@ -605,7 +693,9 @@ class BrowserBridge:
             "No Chromium binary found. Install via: playwright install chromium"
         )
 
-    def _find_full_chromium_from_playwright(self, headless_binary: str | Path) -> str | None:
+    def _find_full_chromium_from_playwright(
+        self, headless_binary: str | Path
+    ) -> str | None:
         """Given a headless_shell binary path, find the full Chromium binary
         in the same Playwright cache (needed for headed + DevTools mode)."""
         pw_path = Path(headless_binary)
@@ -662,7 +752,10 @@ class BrowserBridge:
                 try:
                     with urllib.request.urlopen(url, timeout=1) as resp:
                         if resp.status == 200:
-                            logger.info("browser_bridge: DevTools ready on port %d", self.remote_debug_port)
+                            logger.info(
+                                "browser_bridge: DevTools ready on port %d",
+                                self.remote_debug_port,
+                            )
                             return
                 except Exception:
                     pass
@@ -678,14 +771,21 @@ class BrowserBridge:
 # Factory — creates a BrowserBridge from plugin config
 # ---------------------------------------------------------------------------
 
+
 def create_bridge_from_config(config: dict[str, Any] | None = None) -> BrowserBridge:
     """Create a BrowserBridge instance from A0 plugin config dict."""
+    try:
+        from usr.plugins.phantom_bridge.data_paths import get_profile_dir, ensure_dirs
+    except ImportError:
+        from data_paths import get_profile_dir, ensure_dirs
+
     plugin_dir = Path(__file__).resolve().parent
 
     # Load defaults from YAML if no config provided
     if not config:
         try:
             import yaml
+
             yaml_path = plugin_dir / "default_config.yaml"
             if yaml_path.exists():
                 with open(yaml_path) as f:
@@ -697,7 +797,13 @@ def create_bridge_from_config(config: dict[str, Any] | None = None) -> BrowserBr
 
     config = config or {}
 
-    profile_dir = plugin_dir / config.get("profile_dir", "data/profile")
+    env_data = os.environ.get("PHANTOM_BRIDGE_DATA_DIR", "").strip()
+    if env_data:
+        profile_dir = Path(env_data) / "profile"
+    else:
+        profile_dir = plugin_dir / config.get("profile_dir", "data/profile")
+
+    ensure_dirs()
 
     return BrowserBridge(
         profile_dir=profile_dir,

@@ -21,6 +21,7 @@ import pytest
 # Stub out A0 framework imports so the extension module can be imported
 # ---------------------------------------------------------------------------
 
+
 def _make_agent_stubs():
     """Insert minimal stubs for helpers.extension and agent into sys.modules."""
     # helpers.extension
@@ -30,6 +31,7 @@ def _make_agent_stubs():
     class _Extension:
         def __init__(self):
             self.agent = None
+
     ext_mod.extension.Extension = _Extension
     sys.modules.setdefault("helpers", ext_mod)
     sys.modules.setdefault("helpers.extension", ext_mod.extension)
@@ -57,6 +59,7 @@ from extensions.system_prompt._45_browser_bridge import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_agent(name: str = "gpt-4o", ctx_length: int = 128_000):
     agent = MagicMock()
     agent.config.chat_model.name = name
@@ -68,6 +71,7 @@ def _make_agent(name: str = "gpt-4o", ctx_length: int = 128_000):
 # _is_small_model
 # ---------------------------------------------------------------------------
 
+
 class TestIsSmallModel:
     def test_large_model_returns_false(self):
         assert _is_small_model(_make_agent("gpt-4o", 128_000)) is False
@@ -76,7 +80,10 @@ class TestIsSmallModel:
         assert _is_small_model(_make_agent("some-model", _SMALL_CTX_THRESHOLD)) is True
 
     def test_ctx_just_above_threshold_returns_false(self):
-        assert _is_small_model(_make_agent("some-model", _SMALL_CTX_THRESHOLD + 1)) is False
+        assert (
+            _is_small_model(_make_agent("some-model", _SMALL_CTX_THRESHOLD + 1))
+            is False
+        )
 
     def test_zero_ctx_returns_false(self):
         # ctx_length=0 means "unknown" — don't treat as small
@@ -107,6 +114,7 @@ class TestIsSmallModel:
 # _compact_prompt
 # ---------------------------------------------------------------------------
 
+
 class TestCompactPrompt:
     def test_contains_phantom_bridge_header(self, tmp_path):
         text = _compact_prompt(tmp_path)
@@ -115,8 +123,13 @@ class TestCompactPrompt:
     def test_contains_all_tool_names(self, tmp_path):
         text = _compact_prompt(tmp_path)
         for tool in [
-            "browser_bridge_open", "browser_bridge_close", "browser_bridge_status",
-            "bridge_auth", "bridge_record", "bridge_replay", "bridge_decrypt_cookies",
+            "browser_bridge_open",
+            "browser_bridge_close",
+            "browser_bridge_status",
+            "bridge_auth",
+            "bridge_record",
+            "bridge_replay",
+            "bridge_decrypt_cookies",
         ]:
             assert tool in text, f"missing tool: {tool}"
 
@@ -165,6 +178,7 @@ class TestCompactPrompt:
 # _full_prompt
 # ---------------------------------------------------------------------------
 
+
 class TestFullPrompt:
     def test_contains_phantom_bridge_header(self, tmp_path):
         text = _full_prompt(tmp_path)
@@ -173,8 +187,11 @@ class TestFullPrompt:
     def test_contains_all_tool_names(self, tmp_path):
         text = _full_prompt(tmp_path)
         for tool in [
-            "browser_bridge_open", "bridge_auth", "bridge_record",
-            "bridge_replay", "bridge_decrypt_cookies",
+            "browser_bridge_open",
+            "bridge_auth",
+            "bridge_record",
+            "bridge_replay",
+            "bridge_decrypt_cookies",
         ]:
             assert tool in text
 
@@ -233,6 +250,7 @@ class TestFullPrompt:
 # BrowserBridgeContext.execute — routing
 # ---------------------------------------------------------------------------
 
+
 class TestBrowserBridgeContextExecute:
     def _make_ctx(self, agent):
         ctx = BrowserBridgeContext()
@@ -241,29 +259,26 @@ class TestBrowserBridgeContextExecute:
 
     @pytest.mark.asyncio
     async def test_small_model_appends_compact_prompt(self, tmp_path):
+        import data_paths as dp_mod
+
         agent = _make_agent("phi-3.5", 4096)
         ctx = self._make_ctx(agent)
         prompt_list: list[str] = []
-        with patch(
-            "extensions.system_prompt._45_browser_bridge._plugin_dir",
-            tmp_path,
-        ):
+        with patch.object(dp_mod, "DATA_DIR", tmp_path):
             await ctx.execute(system_prompt=prompt_list)
         assert len(prompt_list) == 1
         text = prompt_list[0]
-        # Compact prompt is concise — should not contain the full "How it works" block
         assert "How it works" not in text
         assert "Phantom Bridge" in text
 
     @pytest.mark.asyncio
     async def test_large_model_appends_full_prompt(self, tmp_path):
+        import data_paths as dp_mod
+
         agent = _make_agent("gpt-4o", 128_000)
         ctx = self._make_ctx(agent)
         prompt_list: list[str] = []
-        with patch(
-            "extensions.system_prompt._45_browser_bridge._plugin_dir",
-            tmp_path,
-        ):
+        with patch.object(dp_mod, "DATA_DIR", tmp_path):
             await ctx.execute(system_prompt=prompt_list)
         assert len(prompt_list) == 1
         text = prompt_list[0]
@@ -271,26 +286,25 @@ class TestBrowserBridgeContextExecute:
 
     @pytest.mark.asyncio
     async def test_exactly_one_item_appended(self, tmp_path):
+        import data_paths as dp_mod
+
         agent = _make_agent("gpt-4o", 128_000)
         ctx = self._make_ctx(agent)
         prompt_list: list[str] = ["existing item"]
-        with patch(
-            "extensions.system_prompt._45_browser_bridge._plugin_dir",
-            tmp_path,
-        ):
+        with patch.object(dp_mod, "DATA_DIR", tmp_path):
             await ctx.execute(system_prompt=prompt_list)
         assert len(prompt_list) == 2
 
     @pytest.mark.asyncio
     async def test_tool_examples_present_in_both_variants(self, tmp_path):
+        import data_paths as dp_mod
+
         for name, ctx_len in [("phi-3.5", 4096), ("gpt-4o", 128_000)]:
             agent = _make_agent(name, ctx_len)
             ctx = self._make_ctx(agent)
             prompt_list: list[str] = []
-            with patch(
-                "extensions.system_prompt._45_browser_bridge._plugin_dir",
-                tmp_path,
-            ):
+            with patch.object(dp_mod, "DATA_DIR", tmp_path):
                 await ctx.execute(system_prompt=prompt_list)
-            assert '{"tool":"browser_bridge_open"}' in prompt_list[0], \
+            assert '{"tool":"browser_bridge_open"}' in prompt_list[0], (
                 f"missing tool example for {name}"
+            )

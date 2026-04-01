@@ -23,7 +23,6 @@ _patched = False
 
 
 class BrowserBridgeProfilePatch(Extension):
-
     async def execute(self, loop_data=None, **kwargs):
         global _patched
         if _patched:
@@ -35,9 +34,9 @@ class BrowserBridgeProfilePatch(Extension):
             return
 
         # Determine the shared profile directory
-        plugin_dir = Path(__file__).resolve().parent.parent.parent.parent
-        profile_rel = config.get("profile_dir", "data/profile")
-        shared_profile = plugin_dir / profile_rel
+        from usr.plugins.phantom_bridge.data_paths import get_profile_dir
+
+        shared_profile = get_profile_dir()
 
         # Patch the browser_agent State class
         try:
@@ -67,21 +66,22 @@ class BrowserBridgeProfilePatch(Extension):
                 # Skip files.delete_dir — we want the profile to persist
 
             State.__del__ = patched_del
-            logger.info("browser_bridge: patched State.__del__ to preserve shared profile")
+            logger.info(
+                "browser_bridge: patched State.__del__ to preserve shared profile"
+            )
 
         except ImportError as e:
             logger.warning(
                 "browser_bridge: could not patch browser_agent (not found): %s", e
             )
         except Exception as e:
-            logger.warning(
-                "browser_bridge: could not patch browser_agent: %s", e
-            )
+            logger.warning("browser_bridge: could not patch browser_agent: %s", e)
 
     def _load_config(self) -> dict:
         """Load plugin configuration."""
         try:
             from helpers.plugins import get_plugin_config
+
             return get_plugin_config("phantom_bridge", agent=self.agent) or {}
         except ImportError:
             pass

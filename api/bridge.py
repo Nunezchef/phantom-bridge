@@ -7,8 +7,6 @@ import urllib.request
 from pathlib import Path
 from helpers.api import ApiHandler, Request, Response
 
-_plugin_root = Path(__file__).resolve().parent.parent
-
 
 class BridgeHandler(ApiHandler):
     async def handle_request(self, request: Request) -> Response:
@@ -94,7 +92,9 @@ class BridgeHandler(ApiHandler):
         return {"ok": True, **result}
 
     def _get_auth_registry(self) -> dict:
-        auth_file = _plugin_root / "data" / "auth_registry.json"
+        from usr.plugins.phantom_bridge.data_paths import get_auth_registry_file
+
+        auth_file = get_auth_registry_file()
         if auth_file.exists():
             try:
                 registry = json.loads(auth_file.read_text())
@@ -104,7 +104,9 @@ class BridgeHandler(ApiHandler):
         return {"ok": True, "registry": {}}
 
     def _get_sitemaps(self) -> dict:
-        sitemaps_dir = _plugin_root / "data" / "sitemaps"
+        from usr.plugins.phantom_bridge.data_paths import get_sitemaps_dir
+
+        sitemaps_dir = get_sitemaps_dir()
         result = {}
         if sitemaps_dir.exists():
             for f in sitemaps_dir.glob("*.json"):
@@ -115,7 +117,9 @@ class BridgeHandler(ApiHandler):
         return {"ok": True, "sitemaps": result}
 
     def _get_playbooks(self) -> dict:
-        playbooks_dir = _plugin_root / "data" / "playbooks"
+        from usr.plugins.phantom_bridge.data_paths import get_playbooks_dir
+
+        playbooks_dir = get_playbooks_dir()
         result = []
         if playbooks_dir.exists():
             for f in playbooks_dir.glob("*.json"):
@@ -306,8 +310,9 @@ class BridgeHandler(ApiHandler):
                 return {"ok": True, "deleted": domain}
             else:
                 delete_all_cookies()
-                # Also clear auth registry
-                auth_file = _plugin_root / "data" / "auth_registry.json"
+                from usr.plugins.phantom_bridge.data_paths import get_auth_registry_file
+
+                auth_file = get_auth_registry_file()
                 if auth_file.exists():
                     auth_file.write_text("{}")
                 return {"ok": True, "deleted": "all"}
@@ -324,7 +329,8 @@ class BridgeHandler(ApiHandler):
         bridge = get_bridge()
         if not bridge:
             return {"ok": False, "error": "Bridge not running"}
-        recorder = getattr(bridge, "_playbook_recorder", None)
+        om = getattr(bridge, "_observer_manager", None)
+        recorder = getattr(om, "_playbook", None) if om else None
         if not recorder:
             return {"ok": False, "error": "Recorder unavailable"}
         try:
@@ -339,7 +345,8 @@ class BridgeHandler(ApiHandler):
         bridge = get_bridge()
         if not bridge:
             return {"ok": False, "error": "Bridge not running"}
-        recorder = getattr(bridge, "_playbook_recorder", None)
+        om = getattr(bridge, "_observer_manager", None)
+        recorder = getattr(om, "_playbook", None) if om else None
         if not recorder:
             return {"ok": False, "error": "Recorder unavailable"}
         try:

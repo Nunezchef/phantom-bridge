@@ -1,0 +1,630 @@
+# Instincts generated from https://github.com/Nunezchef/phantom-bridge
+# Generated: 2026-04-01T01:59:54.400Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: phantom-bridge-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: feat, fix, docs, chore
+
+## Evidence
+
+- 80 commits analyzed
+- Detected conventional commit pattern
+- Examples: feat: add phantom-bridge-conventions ECC bundle (.claude/commands/bugfix-with-targeted-tests.md), docs: add v1.1.1 changelog entry
+
+---
+id: phantom-bridge-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Commit Length
+
+## Action
+
+Write moderate-length commit messages (~62 characters)
+
+## Evidence
+
+- Average commit message length: 62 chars
+- Based on 80 commits
+
+---
+id: phantom-bridge-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Naming Files
+
+## Action
+
+Use snake_case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: snake_case
+
+---
+id: phantom-bridge-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: phantom-bridge-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: phantom-bridge-test-naming
+trigger: "when creating a test file"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Test Naming
+
+## Action
+
+Name test files using the pattern: *.test.ts
+
+## Evidence
+
+- File pattern: *.test.ts
+- Consistent across test files
+
+---
+id: phantom-bridge-workflow-feature-development
+trigger: "when implementing a new feature"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Workflow Feature Development
+
+## Action
+
+Follow the feature-development workflow:
+1. Add feature implementation
+2. Add tests for feature
+3. Update documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~18x per month
+- Files: **/*.test.*, **/api/**
+
+---
+id: phantom-bridge-workflow-feature-development-with-tests-and-docs
+trigger: "when doing feature development with tests and docs"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Workflow Feature Development With Tests And Docs
+
+## Action
+
+Follow the feature-development-with-tests-and-docs workflow:
+1. Implement feature logic in core modules (e.g., bridge.py, observer/*.py, api/*.py, etc.)
+2. Update or add frontend/UI components if needed (e.g., webui/*.js, webui/*.html)
+3. Add or update automated tests covering the new feature (e.g., tests/test_*.py)
+4. Update documentation or changelog to reflect the new feature (e.g., README.md, CHANGELOG.md)
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: bridge.py, observer/*.py, api/*.py
+
+---
+id: phantom-bridge-workflow-bugfix-with-targeted-tests
+trigger: "when doing bugfix with targeted tests"
+confidence: 0.65
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Workflow Bugfix With Targeted Tests
+
+## Action
+
+Follow the bugfix-with-targeted-tests workflow:
+1. Identify and fix the bug in the relevant source file(s)
+2. Add or update a targeted test in tests/test_*.py to reproduce and verify the fix
+3. Optionally update documentation or changelog if the fix is user-facing
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~3x per month
+- Files: bridge.py, observer/*.py, api/*.py
+
+---
+id: phantom-bridge-workflow-frontend-ui-icon-or-style-update
+trigger: "when doing frontend ui icon or style update"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Workflow Frontend Ui Icon Or Style Update
+
+## Action
+
+Follow the frontend-ui-icon-or-style-update workflow:
+1. Replace or update icon/image files (e.g., webui/icon.png, webui/thumbnail.png, extensions/webui/*.html)
+2. Update references to icons in HTML/JS files
+3. Test UI to ensure new icons/styles render correctly
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: webui/icon.png, webui/thumbnail.png, extensions/webui/chat-input-bottom-actions-end/phantom-bridge-button.html
+
+---
+id: phantom-bridge-workflow-documentation-and-readme-polish
+trigger: "when doing documentation and readme polish"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Workflow Documentation And Readme Polish
+
+## Action
+
+Follow the documentation-and-readme-polish workflow:
+1. Edit README.md for clarity, new sections, or updated instructions
+2. Add or update images/banners in docs/
+3. Update CHANGELOG.md with new entries
+4. Optionally update .gitignore for documentation-related artifacts
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: README.md, docs/*.png, docs/banner.png
+
+---
+id: phantom-bridge-workflow-security-or-audit-hardening
+trigger: "when doing security or audit hardening"
+confidence: 0.55
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Workflow Security Or Audit Hardening
+
+## Action
+
+Follow the security-or-audit-hardening workflow:
+1. Update configuration files for security (e.g., requirements.txt, default_config.yaml)
+2. Remove sensitive or development-only files from the repo
+3. Update .gitignore to exclude new sensitive/artifact paths
+4. Apply code changes to restrict access or enable protections (e.g., CSRF, bind_address)
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~1x per month
+- Files: .gitignore, requirements.txt, default_config.yaml
+
+---
+id: phantom-bridge-workflow-backend-integration-or-compatibility-update
+trigger: "when doing backend integration or compatibility update"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Workflow Backend Integration Or Compatibility Update
+
+## Action
+
+Follow the backend-integration-or-compatibility-update workflow:
+1. Update backend source files for compatibility (e.g., bridge.py, observer/*.py, api/*.py, extensions/system_prompt/*.py)
+2. Update or add tests to cover new integration points
+3. Update frontend or UI logic if new events/data are exposed
+4. Document changes in CHANGELOG.md
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: bridge.py, observer/*.py, api/*.py
+
+---
+id: phantom-bridge-instinct-file-naming
+trigger: "When creating a new file in the codebase"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Instinct File Naming
+
+## Action
+
+Name the file using snake_case
+
+## Evidence
+
+- Pattern in namingConventions.files: snake_case
+
+---
+id: phantom-bridge-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Instinct Function Naming
+
+## Action
+
+Name the function using camelCase
+
+## Evidence
+
+- Pattern in namingConventions.functions: camelCase
+
+---
+id: phantom-bridge-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Instinct Class Naming
+
+## Action
+
+Name the class using PascalCase
+
+## Evidence
+
+- Pattern in namingConventions.classes: PascalCase
+
+---
+id: phantom-bridge-instinct-constant-naming
+trigger: "When defining a constant"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Instinct Constant Naming
+
+## Action
+
+Name the constant using SCREAMING_SNAKE_CASE
+
+## Evidence
+
+- Pattern in namingConventions.constants: SCREAMING_SNAKE_CASE
+
+---
+id: phantom-bridge-instinct-import-style
+trigger: "When importing modules in Python code"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Instinct Import Style
+
+## Action
+
+Use absolute imports
+
+## Evidence
+
+- Pattern in importStyle: absolute
+
+---
+id: phantom-bridge-instinct-export-style
+trigger: "When exporting functions or classes"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in exportStyle: named
+
+---
+id: phantom-bridge-instinct-test-location
+trigger: "When adding or updating tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Instinct Test Location
+
+## Action
+
+Place test files in the separate 'tests' directory, following the pattern tests/test_*.py
+
+## Evidence
+
+- Pattern in architecture.folderStructure.testLocation: separate
+- Pattern in filesInvolved: tests/test_*.py
+
+---
+id: phantom-bridge-instinct-test-type
+trigger: "When writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Instinct Test Type
+
+## Action
+
+Write unit tests
+
+## Evidence
+
+- Pattern in testing.testTypes: unit
+
+---
+id: phantom-bridge-instinct-test-pattern
+trigger: "When naming a test file"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Instinct Test Pattern
+
+## Action
+
+Use the pattern tests/test_*.py
+
+## Evidence
+
+- Pattern in filesInvolved: tests/test_*.py
+
+---
+id: phantom-bridge-instinct-commit-format
+trigger: "When writing a commit message"
+confidence: 0.95
+domain: git
+source: repo-analysis
+source_repo: Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Instinct Commit Format
+
+## Action
+
+Use conventional commit prefixes (feat, fix, docs, chore, security) followed by a colon and a short description
+
+## Evidence
+
+- Pattern in commits.prefixes
+- Seen in commit: 'feat: add phantom-bridge-conventions ECC bundle...'
+
+---
+id: phantom-bridge-instinct-commit-length
+trigger: "When writing a commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Instinct Commit Length
+
+## Action
+
+Keep the commit message concise, around 62 characters on average
+
+## Evidence
+
+- Pattern in commits.averageLength: 62
+
+---
+id: phantom-bridge-instinct-feature-development
+trigger: "When someone wants to add a new capability or major improvement to the codebase"
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Instinct Feature Development
+
+## Action
+
+Implement feature logic in core modules, update/add frontend components if needed, add/update automated tests, and update documentation or changelog
+
+## Evidence
+
+- Workflow: feature-development-with-tests-and-docs
+- Commit sequence and files involved
+
+---
+id: phantom-bridge-instinct-bugfix-with-tests
+trigger: "When someone needs to resolve a reported bug or regression"
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Instinct Bugfix With Tests
+
+## Action
+
+Identify and fix the bug in relevant source files, add or update a targeted test to verify the fix, and optionally update documentation or changelog if user-facing
+
+## Evidence
+
+- Workflow: bugfix-with-targeted-tests
+- Commit sequence and files involved
+
+---
+id: phantom-bridge-instinct-frontend-ui-update
+trigger: "When someone wants to improve or change the look and feel of the UI, especially icons"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Instinct Frontend Ui Update
+
+## Action
+
+Replace or update icon/image files, update references in HTML/JS, and test UI to ensure correct rendering
+
+## Evidence
+
+- Workflow: frontend-ui-icon-or-style-update
+- Commit sequence and files involved
+
+---
+id: phantom-bridge-instinct-docs-polish
+trigger: "When someone wants to clarify, polish, or update project documentation"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Instinct Docs Polish
+
+## Action
+
+Edit README.md, update images/banners in docs/, update CHANGELOG.md, and optionally update .gitignore for documentation artifacts
+
+## Evidence
+
+- Workflow: documentation-and-readme-polish
+- Commit sequence and files involved
+
+---
+id: phantom-bridge-instinct-security-hardening
+trigger: "When someone wants to address audit findings or harden the codebase before release"
+confidence: 0.85
+domain: workflow
+source: repo-analysis
+source_repo: Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Instinct Security Hardening
+
+## Action
+
+Update configuration files for security, remove sensitive/dev files, update .gitignore, and apply code changes to restrict access or enable protections
+
+## Evidence
+
+- Workflow: security-or-audit-hardening
+- Commit sequence and files involved
+
+---
+id: phantom-bridge-instinct-backend-compat-update
+trigger: "When someone needs to adapt the backend for a new platform version or protocol"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: Nunezchef/phantom-bridge
+---
+
+# Phantom Bridge Instinct Backend Compat Update
+
+## Action
+
+Update backend source files for compatibility, update/add tests for new integration points, update frontend/UI if needed, and document changes in CHANGELOG.md
+
+## Evidence
+
+- Workflow: backend-integration-or-compatibility-update
+- Commit sequence and files involved
+

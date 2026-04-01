@@ -5,238 +5,219 @@
 
 ## Overview
 
-This skill teaches you the core development patterns, coding conventions, and workflows used in the `phantom-bridge` Python codebase. The project is a backend-focused bridge system with a modular architecture, supporting API endpoints, frontend UI, plugin configuration, and agent prompt integration. You'll learn how to implement features, fix bugs, update the UI, manage documentation, and apply security practices in a consistent, maintainable way.
-
----
+This skill teaches you the core development patterns, coding conventions, and collaboration workflows used in the `phantom-bridge` Python codebase. The repository centers on a backend bridge system with observer modules, CLI tools, and a WebUI, but does not use a formal web framework. Development follows clear commit conventions, modular Python design, and a set of well-defined workflows for features, bugfixes, API changes, documentation, UI work, and refactoring.
 
 ## Coding Conventions
 
 - **File Naming:**  
   Use `snake_case` for Python files and directories.  
-  *Example:*  
+  _Example:_  
   ```
-  api/bridge.py
-  observer/event_handler.py
-  tools/utilities.py
+  observer/metrics.py
+  tools/bridge_record.py
   ```
 
 - **Import Style:**  
-  Use absolute imports within Python modules.  
-  *Example:*  
+  Use absolute imports for all modules.  
+  _Example:_  
   ```python
-  # Correct
-  from api.bridge import BridgeAPI
-
-  # Avoid
-  from .bridge import BridgeAPI
+  import observer.metrics
+  from tools.bridge_record import BridgeRecorder
   ```
 
 - **Export Style:**  
-  Use named exports (explicit function/class definitions).  
-  *Example:*  
+  Use named exports (explicit functions/classes).  
+  _Example:_  
   ```python
-  # api/bridge.py
-  class BridgeAPI:
-      pass
-
-  def get_status():
-      pass
+  def start_bridge():
+      ...
   ```
 
 - **Commit Messages:**  
-  Follow [Conventional Commits](https://www.conventionalcommits.org/) with these prefixes:  
-  - `fix:` for bug fixes  
-  - `feat:` for new features  
-  - `docs:` for documentation  
-  - `chore:` for maintenance  
-  *Example:*  
+  Follow [Conventional Commits](https://www.conventionalcommits.org/), using prefixes like `feat`, `fix`, `docs`, `chore`.  
+  _Example:_  
   ```
-  feat: add batch processing to observer module
-  fix: handle null payloads in bridge API
+  feat(observer): add session health monitoring to manager
+  fix(tools): handle missing replay file edge case
   ```
 
----
+- **Directory Structure:**  
+  - `api/` — API endpoint handlers
+  - `observer/` — Observer modules and managers
+  - `tools/` — CLI and utility scripts
+  - `webui/` — JS and HTML for the WebUI
+  - `tests/` — Python test files (`test_*.py`)
+  - `extensions/` — Prompts and extension modules
+  - `docs/` — Documentation
 
 ## Workflows
 
-### Feature Development, Implementation, Tests & Docs
-**Trigger:** When adding a new capability or major feature  
+### Feature Development with API, Tool, and UI
+**Trigger:** When adding a significant new capability that spans backend API, core logic, tools/CLIs, and WebUI.  
 **Command:** `/feature`
 
-1. Implement feature logic in backend Python modules (`api/`, `observer/`, `tools/`)
-2. Update or add supporting frontend files (`webui/`, `extensions/webui/`) if needed
-3. Update or add API endpoints (e.g., `api/bridge.py`)
-4. Update `plugin.yaml` or config if new settings are introduced
-5. Write or update tests in `tests/` for the new feature
-6. Update documentation (`README.md`, `CHANGELOG.md`) if user-facing
+1. Edit or add backend logic in `api/bridge.py` and/or `bridge.py`.
+2. Update or add observer modules, e.g., `observer/manager.py`, `observer/auth_registry.py`, `observer/metrics.py`.
+3. Add or update tool scripts, e.g., `tools/bridge_record.py`, `tools/bridge_replay.py`.
+4. Update or add WebUI files:  
+   - JS: `webui/phantom-bridge-store.js`  
+   - HTML: `webui/main.html`, `webui/bridge-modal.html`
+5. Update `plugin.yaml` if new settings or endpoints are introduced.
+6. Optionally, add or update prompts/extensions in `extensions/prompts/*.md` if agent instructions change.
 
-*Example:*
+_Example:_  
 ```python
 # api/bridge.py
-def new_feature():
-    """Implements the new capability."""
-    pass
+def add_health_endpoint():
+    # New API endpoint logic
+    ...
 ```
-```yaml
-# plugin.yaml
-settings:
-  enable_new_feature: true
+```js
+// webui/phantom-bridge-store.js
+export function showHealthStatus(status) {
+    ...
+}
+```
+
+---
+
+### Bugfix or Hardening with Targeted Tests
+**Trigger:** When fixing a specific bug, regression, or reviewer comment, especially in observer or tools modules.  
+**Command:** `/bugfix`
+
+1. Edit the affected backend, observer, or tool file(s) to fix the bug or add a guard.
+2. Add or update a test file (`tests/test_*.py`) to cover the fixed behavior.
+3. Commit both code and test changes together.
+
+_Example:_  
+```python
+# observer/metrics.py
+def get_metric(name):
+    if name not in metrics:
+        return None  # Guard added
+    return metrics[name]
+```
+```python
+# tests/test_metrics.py
+def test_get_metric_missing():
+    assert get_metric('nonexistent') is None
 ```
 
 ---
 
 ### API Endpoint Addition or Modification
-**Trigger:** When exposing new backend functionality to frontend or clients  
-**Command:** `/add-endpoint`
+**Trigger:** When exposing new backend functionality via an API endpoint.  
+**Command:** `/api-endpoint`
 
-1. Implement or update endpoint in `api/bridge.py` (or related `api/*.py`)
-2. Update `plugin.yaml` if endpoint or settings change
-3. Update frontend store/UI to consume the new endpoint (`webui/phantom-bridge-store.js`, `webui/*.html`)
-4. Write or update tests in `tests/` for endpoint behavior
+1. Edit or add endpoint handler in `api/bridge.py`.
+2. Update `plugin.yaml` to document/register the endpoint.
+3. Optionally, update/add a tool script or WebUI integration.
+4. Optionally, add or update tests for the endpoint.
 
-*Example:*
+_Example:_  
 ```python
 # api/bridge.py
-def get_bridge_status():
-    return {"status": "ok"}
+def new_endpoint():
+    ...
 ```
-```js
-// webui/phantom-bridge-store.js
-fetch('/api/bridge/status').then(...)
-```
-
----
-
-### Frontend UI Component Update
-**Trigger:** When improving or adding to the user interface  
-**Command:** `/ui-update`
-
-1. Edit or add HTML component in `webui/` or `extensions/webui/`
-2. Update supporting JS store logic if needed (`webui/phantom-bridge-store.js`)
-3. Update icons or images (`webui/icon.png`, `webui/thumbnail.png`, etc.)
-4. Update `README.md` or docs if user-facing changes
-
-*Example:*
-```html
-<!-- webui/new_modal.html -->
-<div class="modal">New Feature Modal</div>
-```
-```js
-// webui/phantom-bridge-store.js
-export function openNewModal() { /* ... */ }
+```yaml
+# plugin.yaml
+endpoints:
+  - name: new_endpoint
+    path: /api/new
+    method: POST
 ```
 
 ---
 
-### Bugfix with Targeted Tests
-**Trigger:** When resolving a defect and preventing recurrence  
-**Command:** `/bugfix`
+### Documentation and Changelog Update
+**Trigger:** When documenting new features, fixes, or preparing for a release.  
+**Command:** `/docs`
 
-1. Identify and fix bug in backend or frontend source (`api/`, `observer/`, `tools/`, `webui/`)
-2. Add or update test(s) in `tests/` to cover the fixed scenario
-3. Optionally update documentation if user-facing
+1. Edit `README.md` to reflect new features or changes.
+2. Add or update `CHANGELOG.md` with version entries.
+3. Optionally, add or update other docs (`docs/*.md`, `docs/*.yaml`, `docker-compose.yml`).
 
-*Example:*
-```python
-# tools/utilities.py
-def safe_parse(data):
-    if data is None:
-        return {}
-    # ...rest of logic
-```
-```python
-# tests/test_utilities.py
-def test_safe_parse_handles_none():
-    assert safe_parse(None) == {}
-```
-
----
-
-### System Prompt or Agent Integration Update
-**Trigger:** When changing agent interaction or prompt logic  
-**Command:** `/prompt-update`
-
-1. Edit system prompt or agent prompt files (`extensions/system_prompt/_45_browser_bridge.py`, `extensions/prompts/agent.system.tool.*.md`)
-2. Update backend logic if prompt structure or tool interface changes
-3. Add or update tests in `tests/test_system_prompt.py` or related
-4. Update documentation if user-facing
-
-*Example:*
-```python
-# extensions/system_prompt/_45_browser_bridge.py
-SYSTEM_PROMPT = "You are now connected to the Phantom Bridge."
-```
-
----
-
-### Security or Audit Hardening
-**Trigger:** When addressing security audit findings or hardening the system  
-**Command:** `/security-fix`
-
-1. Update API/config to restrict access or fix vulnerabilities (`api/*.py`, `default_config.yaml`, `requirements.txt`)
-2. Update `.gitignore` to exclude sensitive or dev artifacts
-3. Remove or clean up development artifacts from repo
-4. Document changes in `README.md` or `CHANGELOG.md`
-
-*Example:*
-```python
-# api/bridge.py
-def secure_endpoint(user):
-    if not user.is_admin:
-        raise PermissionError("Admin only")
-```
-```gitignore
-# .gitignore
-*.env
-*.pyc
-```
-
----
-
-### Documentation Release Update
-**Trigger:** When preparing for a release or improving documentation  
-**Command:** `/docs-update`
-
-1. Update `README.md` with new features, instructions, or highlights
-2. Add or update `CHANGELOG.md` with recent changes
-3. Add or update `docs/` assets (banner, index.yaml, thumbnails, etc.)
-4. Update `plugin.yaml` version or description if needed
-
-*Example:*
+_Example:_  
 ```markdown
-# CHANGELOG.md
 ## [1.2.0] - 2024-06-01
 ### Added
-- Batch processing in observer module
+- Health monitoring endpoint
+```
+
+---
+
+### WebUI Feature or Bugfix
+**Trigger:** When adding, improving, or fixing a UI element or behavior.  
+**Command:** `/webui`
+
+1. Edit or add JS logic in `webui/phantom-bridge-store.js`.
+2. Edit or add HTML component files (`webui/bridge-modal.html`, `webui/main.html`, etc.).
+3. Optionally, coordinate with backend or API changes.
+
+_Example:_  
+```js
+// webui/phantom-bridge-store.js
+export function updateSessionList(sessions) {
+    ...
+}
+```
+```html
+<!-- webui/bridge-modal.html -->
+<div id="session-list"></div>
+```
+
+---
+
+### Refactor or Centralize Shared Logic
+**Trigger:** When DRYing up code, centralizing configuration, or fixing import/path issues across modules.  
+**Command:** `/refactor`
+
+1. Create or update a shared module (e.g., `data_paths.py`).
+2. Update all modules to use the new shared logic.
+3. Update or fix tests to use the new logic.
+
+_Example:_  
+```python
+# data_paths.py
+def get_data_dir():
+    ...
+```
+```python
+# observer/manager.py
+from data_paths import get_data_dir
 ```
 
 ---
 
 ## Testing Patterns
 
-- **Framework:** Unknown (custom or standard Python testing)
-- **File Pattern:** Python tests are in `tests/*.py`
-- **Test Naming:** Use descriptive function names for test cases
-- **Example:**
+- **Test File Naming:**  
+  All tests are Python files named `test_*.py` in the `tests/` directory.
+
+- **Test Framework:**  
+  Not explicitly specified; likely uses `pytest` or standard `unittest`.
+
+- **Test Example:**  
   ```python
   # tests/test_bridge.py
-  def test_bridge_returns_status_ok():
-      result = get_bridge_status()
-      assert result["status"] == "ok"
+  def test_bridge_startup():
+      bridge = Bridge()
+      assert bridge.is_running()
   ```
-- **Note:** There are also references to `*.test.ts` (TypeScript), but Python tests are primary.
 
----
+- **Other Patterns:**  
+  - Tests are updated or added alongside bugfixes and new features.
+  - Each test targets a specific function or module.
 
 ## Commands
 
-| Command         | Purpose                                                 |
-|-----------------|---------------------------------------------------------|
-| /feature        | Start a new feature with implementation and docs         |
-| /add-endpoint   | Add or modify an API endpoint                           |
-| /ui-update      | Update or add a frontend UI component                   |
-| /bugfix         | Fix a bug and add/update regression tests               |
-| /prompt-update  | Update system prompt or agent integration logic         |
-| /security-fix   | Apply security fixes or audit recommendations           |
-| /docs-update    | Update documentation and changelogs for a release       |
+| Command      | Purpose                                                      |
+|--------------|--------------------------------------------------------------|
+| /feature     | Start a new feature spanning backend, tools, and WebUI       |
+| /bugfix      | Fix a bug and add/update targeted tests                      |
+| /api-endpoint| Add or modify an API endpoint and update plugin.yaml         |
+| /docs        | Update documentation and changelogs                          |
+| /webui       | Implement or fix a WebUI feature                             |
+| /refactor    | Centralize or refactor shared logic across modules           |
 ```
